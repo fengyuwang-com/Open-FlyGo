@@ -58,7 +58,7 @@ cargo build --release
 ```
 
 细节见 `control-plane/README.md`、`control-plane/API-CONTRACT.md`、`docs/project-structure.md`。
-当前版本：`2026.09.07-0130`（见根目录 `Version` 文件，格式 `YYYY.MM.DD-HHMM`）。可执行产物见 [Releases](../../releases/latest)。
+当前版本：`2026.09.07-0130`（见根目录 `Version` 文件，格式 `YYYY.MM.DD-HHMM`）。版本发布见 [Releases](../../releases/latest)（当前请从源码构建，预编译产物将以后续重编译版本提供）。
 
 ## 文档导航
 
