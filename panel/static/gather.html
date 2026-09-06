@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>飞狗 — 手机汇聚引导</title>
+<meta name="description" content="飞狗手机汇聚引导：六步把手机相册与下载目录安全地汇聚到节点（只上传，不回删）。">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f5f8">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1115">
+<style>
+/* ============================================================
+   FlyGo /gather - standalone mobile six-step guide
+   Single-file UI; design tokens per DESIGN.md (dark default +
+   explicit light set; cold slate + single accent blue; weights
+   400/500/600 only; semantic colors only mark states).
+   ============================================================ */
+:root{
+  --bg:#0f1115; --panel:#15181e; --panel2:#1a1e26; --border:#262c36;
+  --text:#e5e7eb; --muted:#8b93a1; --accent:#4c9aff; --accent-bg:#20314a;
+  --ok:#34d399; --warn:#f59e0b; --err:#ef4444;
+  --dot-gray:#565d6a; --on-accent:#fff;
+}
+@media (prefers-color-scheme: light){
+  :root{
+    --bg:#f3f5f8; --panel:#ffffff; --panel2:#f0f2f6; --border:#dbe0ea;
+    --text:#1a2433; --muted:#5b6b80; --accent:#2563eb; --accent-bg:#e3ecfb;
+    --ok:#059669; --warn:#d97706; --err:#dc2626;
+    --dot-gray:#9aa3b2; --on-accent:#fff;
+  }
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC","Noto Sans SC","Helvetica Neue",Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;font-size:.9rem;-webkit-text-size-adjust:100%}
+b,strong{font-weight:600}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.wrap{max-width:560px;margin:0 auto;padding:.9rem .9rem 1rem}
+
+/* header */
+.brand{display:flex;align-items:center;gap:.55rem;margin-bottom:.9rem}
+.brand .logo{width:34px;height:34px;border-radius:8px;background:var(--accent);color:var(--on-accent);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:1.05rem;flex-shrink:0}
+.brand .bt{font-size:1.05rem;font-weight:600}
+.brand .sub{font-size:.68rem;color:var(--muted);margin-top:.15rem;line-height:1.6}
+
+/* step indicator: 6 cells, current accent / done ok / todo gray */
+.steps{display:flex;gap:.3rem;margin-bottom:.55rem}
+.stp{flex:1;display:flex;flex-direction:column;align-items:center;gap:.25rem;padding:.4rem 0;border-radius:8px;cursor:pointer;font-family:inherit;background:none;border:none;color:var(--muted)}
+.stp i{width:24px;height:24px;border-radius:50%;background:var(--panel2);border:1px solid var(--border);color:var(--muted);display:flex;align-items:center;justify-content:center;font-style:normal;font-weight:600;font-size:.75rem}
+.stp span{font-size:.64rem;line-height:1.3;text-align:center}
+.stp.cur{background:var(--accent-bg)}
+.stp.cur i{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.stp.cur span{color:var(--text);font-weight:500}
+.stp.done i{background:var(--ok);border-color:var(--ok);color:var(--on-accent)}
+
+/* cards */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:.8rem .9rem;margin-bottom:.7rem}
+.card[hidden]{display:none}
+.chead{display:flex;align-items:baseline;gap:.45rem;margin-bottom:.6rem;flex-wrap:wrap}
+.chead .sno{display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--on-accent);align-items:center;justify-content:center;font-size:.75rem;font-weight:600;flex-shrink:0;align-self:center}
+.chead .ct{font-size:.95rem;font-weight:600}
+.chead .est{color:var(--muted);font-weight:400;font-size:.68rem}
+.dim{color:var(--muted)}
+.body-t{font-size:.8rem;line-height:1.8}
+.body-t .li{margin:.2rem 0}
+.btnrow{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.6rem}
+.btn{border:none;border-radius:6px;padding:.55rem .85rem;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit;transition:transform .1s}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.on{background:var(--accent);color:var(--on-accent);text-decoration:none;display:inline-flex;align-items:center}
+.btn.off{background:var(--panel2);color:var(--muted);border:1px solid var(--border)}
+a{color:var(--accent)}
+
+/* info / warning strips (semantic colors mark state only) */
+.note{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:.55rem .7rem;font-size:.75rem;line-height:1.8}
+.note.key{background:var(--accent-bg);border-color:transparent;color:var(--text)}
+.alert{border:1px solid var(--warn);border-radius:8px;padding:.55rem .7rem;font-size:.75rem;line-height:1.8;color:var(--warn);margin-top:.6rem}
+.alert.err{border-color:var(--err);color:var(--err)}
+.alert[hidden]{display:none}
+
+/* key-value metrics */
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:.45rem;margin-top:.6rem}
+.kv .m{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:.5rem .65rem;min-width:0}
+.kv .m.wide{grid-column:1 / -1}
+.kv .lab{font-size:.64rem;color:var(--muted);margin-bottom:.2rem}
+.kv .val{font-size:.9rem;font-weight:500;overflow-wrap:anywhere;word-break:break-all}
+.kv .val.num{font-size:1.15rem;font-weight:600}
+.pre{font-family:'Cascadia Mono',Consolas,'Microsoft YaHei',monospace;font-size:.75rem;color:var(--muted);word-break:break-all}
+
+/* status line: dot + text */
+.stat{display:flex;align-items:flex-start;gap:.4rem;font-size:.75rem;line-height:1.7}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dot-gray);flex-shrink:0;margin-top:.4rem}
+.dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.err{background:var(--err)}
+.ok{color:var(--ok)} .warn{color:var(--warn)} .err{color:var(--err)}
+
+/* QR: white background is the one functional exception (DESIGN.md) */
+.qrwrap{margin-top:.7rem;text-align:center}
+.qrwrap[hidden]{display:none}
+.qrbox{width:min(70vw,232px);height:min(70vw,232px);background:#fff;border-radius:10px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;margin:0 auto}
+.qrbox svg{width:100%;height:100%;display:block}
+.qrmiss{color:var(--muted);font-size:.75rem;padding:1.2rem .5rem;line-height:1.7}
+.hint{font-size:.68rem;color:var(--muted);margin-top:.4rem;line-height:1.7}
+
+/* vendor keep-alive collapsibles */
+details.vendor{border:1px solid var(--border);border-radius:8px;margin-top:.45rem;font-size:.75rem}
+details.vendor summary{cursor:pointer;padding:.5rem .65rem;font-weight:500;color:var(--text);list-style-position:inside}
+details.vendor .vbody{padding:.1rem .65rem .6rem;color:var(--muted);line-height:1.9}
+
+/* folder rows (step 6) */
+.frow{display:flex;align-items:center;gap:.45rem;padding:.4rem 0;border-bottom:1px solid var(--border);font-size:.75rem}
+.frow:last-child{border-bottom:none}
+.frow .fn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frow .fs{color:var(--muted);flex-shrink:0}
+
+/* bottom nav */
+.gnav{position:sticky;bottom:0;display:flex;align-items:center;gap:.45rem;margin-top:.3rem;padding:.55rem 0 calc(.55rem + env(safe-area-inset-bottom));background:var(--bg)}
+.gnav .prog{flex:1;text-align:center;font-size:.68rem;color:var(--muted)}
+.gnav .btn{min-width:96px;justify-content:center}
+.foot{text-align:center;font-size:.68rem;color:var(--muted);padding:.6rem 0 1rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <span class="logo">F</span>
+      <div>
+        <div class="bt">飞狗 · 手机汇聚引导</div>
+        <div class="sub">把手机相册与下载目录汇聚到节点：只上传、不回删，全程约 10 分钟</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="steps" id="steps">
+    <button class="stp" data-n="1"><i>1</i><span>装组网</span></button>
+    <button class="stp" data-n="2"><i>2</i><span>装同步</span></button>
+    <button class="stp" data-n="3"><i>3</i><span>扫码配对</span></button>
+    <button class="stp" data-n="4"><i>4</i><span>仅发送</span></button>
+    <button class="stp" data-n="5"><i>5</i><span>保活</span></button>
+    <button class="stp" data-n="6"><i>6</i><span>验证</span></button>
+  </div>
+
+  <main>
+
+    <!-- STEP 1: Tailscale -->
+    <section class="card" data-step="1">
+      <div class="chead"><span class="sno">1</span><span class="ct">安装 Tailscale</span><span class="est">约 1 分钟</span></div>
+      <div class="body-t">
+        <div class="li">Tailscale 在手机与节点之间建立加密通道：在外面用移动网络也能连回家里节点。</div>
+        <div class="li dim">手机与节点长期在同一 WiFi 时可以先跳过（第 3 步靠局域网发现也能配对），但建议安装——之后同步不再挑网络。</div>
+      </div>
+      <div class="btnrow">
+        <a class="btn on" target="_blank" rel="noopener" href="https://tailscale.com/download">打开下载页</a>
+        <button class="btn off" id="qr-ts-btn">显示下载二维码</button>
+      </div>
+      <div class="qrwrap" id="qr-ts" hidden>
+        <div class="qrbox" id="qr-ts-img"></div>
+        <div class="hint">用另一台设备扫此码直达下载页；本机直接点上方按钮即可</div>
+      </div>
+      <div class="note" style="margin-top:.6rem">
+        安装后：打开 App → 登录与节点相同的 Tailscale 账号 → 开启连接，状态显示「已连接」即完成。
+      </div>
+    </section>
+
+    <!-- STEP 2: Syncthing-Fork -->
+    <section class="card" data-step="2" hidden>
+      <div class="chead"><span class="sno">2</span><span class="ct">安装 Syncthing-Fork</span><span class="est">约 2 分钟</span></div>
+      <div class="body-t">
+        <div class="li">手机数据同步客户端：把相册、下载等目录推送到节点。社区活跃维护，含保活补丁。</div>
+      </div>
+      <div class="btnrow">
+        <a class="btn on" target="_blank" rel="noopener" href="https://f-droid.org/packages/com.github.catfriend1.syncthingandroid/">F-Droid 页面</a>
+        <a class="btn off" target="_blank" rel="noopener" href="https://github.com/Catfriend1/syncthing-android/releases">GitHub APK</a>
+        <button class="btn off" id="qr-fd-btn">F-Droid 二维码</button>
+      </div>
+      <div class="qrwrap" id="qr-fd" hidden>
+        <div class="qrbox" id="qr-fd-img"></div>
+        <div class="hint">用另一台设备扫此码直达 F-Droid 页面</div>
+      </div>
+      <div class="alert">
+        ⚠️ 别装官方版 Syncthing 安卓客户端——官方版已于 2023 年底停止维护、不再更新；本引导只支持 Syncthing-Fork。
+      </div>
+      <div class="note" style="margin-top:.6rem">
+        首次打开会初始化约 10-30 秒，看到「Web GUI」或主界面即就绪；期间保持联网。
+      </div>
+    </section>
+
+    <!-- STEP 3: pair -->
+    <section class="card" data-step="3" hidden>
+      <div class="chead"><span class="sno">3</span><span class="ct">扫码配对</span><span class="est">约 1 分钟</span></div>
+      <div class="stat" id="pair-state"><span class="dot"></span><span class="dim">读取节点信息…</span></div>
+      <div class="kv">
+        <div class="m"><div class="lab">节点名称</div><div class="val" id="node-name">—</div></div>
+        <div class="m"><div class="lab">节点 Tailscale IP</div><div class="val" id="node-ip">—</div></div>
+        <div class="m wide"><div class="lab">节点设备 ID（Syncthing）</div><div class="val pre" id="node-id">—</div></div>
+      </div>
+      <div class="qrwrap" id="pair-qrwrap" hidden>
+        <div class="qrbox" id="pair-qr"><div class="qrmiss">生成配对二维码…</div></div>
+        <div class="hint">Syncthing-Fork 的扫码器直接识别此码</div>
+      </div>
+      <div class="btnrow">
+        <button class="btn off" id="pair-refresh">刷新节点信息</button>
+      </div>
+      <div class="note" style="margin-top:.6rem">
+        手机上：打开 Syncthing-Fork → 底部「设备」→ 右上角 ＋ → 点二维码图标扫上方二维码 → 保存。<br>
+        节点侧：电脑上的 Syncthing 会弹「新设备」提示，点「添加设备」完成互认（两步缺一不可）。
+      </div>
+    </section>
+
+    <!-- STEP 4: send-only -->
+    <section class="card" data-step="4" hidden>
+      <div class="chead"><span class="sno">4</span><span class="ct">目录设为「仅发送 Send Only」</span><span class="est">约 1 分钟</span></div>
+      <div class="note key">
+        仅发送 = 手机只上传。节点侧的任何改动（包括删除）<b>永远不会回传到手机</b>——节点永不反向删手机上的文件。
+      </div>
+      <div class="body-t" style="margin-top:.6rem">
+        <div class="li">手机上：Syncthing-Fork → 底部「文件夹」→ ＋ → 选择相册 / 下载等目录；</div>
+        <div class="li">「文件夹类型」务必选 <b>仅发送（Send Only）</b>；</div>
+        <div class="li">「共享给设备」勾选第 3 步配对的节点 → 保存；</div>
+        <div class="li">节点侧：电脑上的 Syncthing 弹「新文件夹」提示，选择保存位置并点「添加」。</div>
+      </div>
+      <div class="alert">
+        注意删除的传播方向：手机上自己删除文件，删除仍会同步、节点副本会跟着删——这是同步工具的正常行为，手机上请谨慎删除。误删后能否找回，取决于节点文件夹是否开启了版本控制。
+      </div>
+    </section>
+
+    <!-- STEP 5: keep-alive -->
+    <section class="card" data-step="5" hidden>
+      <div class="chead"><span class="sno">5</span><span class="ct">保活设置（按厂商）</span><span class="est">约 2 分钟</span></div>
+      <div class="body-t dim">
+        安卓厂商默认会杀后台应用。按手机品牌完成下面三件事：<b>电池不限制 + 允许自启动 + 允许后台活动</b>。
+      </div>
+      <details class="vendor">
+        <summary>小米 / Redmi（HyperOS / MIUI）</summary>
+        <div class="vbody">
+          设置 → 应用设置 → 应用管理 → Syncthing-Fork → 省电策略：<b>无限制</b>；自启动：允许；后台弹出界面：允许。<br>
+          另：设置 → 省电与电池 → 右上角齿轮 → 「锁屏后断开数据」：<b>从不</b>。
+        </div>
+      </details>
+      <details class="vendor">
+        <summary>华为（EMUI / HarmonyOS）</summary>
+        <div class="vbody">
+          设置 → 应用 → 应用启动管理 → Syncthing-Fork → 关闭「自动管理」，手动管理里 <b>自启动 / 关联启动 / 后台活动</b> 全部允许。<br>
+          另：设置 → 电池 → 更多电池设置 → 「休眠时始终保持网络连接」：<b>开</b>。
+        </div>
+      </details>
+      <details class="vendor">
+        <summary>OPPO / 一加（ColorOS）</summary>
+        <div class="vbody">
+          设置 → 电池 → 应用耗电管理 → Syncthing-Fork → <b>允许完全后台行为</b>。<br>
+          另：设置 → 应用管理 → 应用程序 → Syncthing-Fork → 允许自启动：开；耗电管理：允许后台运行。
+        </div>
+      </details>
+      <details class="vendor">
+        <summary>荣耀（MagicOS）</summary>
+        <div class="vbody">
+          设置 → 应用 → 应用启动管理 → Syncthing-Fork → 手动管理：<b>允许自启动 / 关联启动 / 后台活动</b>。<br>
+          另：设置 → 电池 → 更多电池设置 → 「休眠时始终保持网络连接」：<b>开</b>。
+        </div>
+      </details>
+      <div class="note" style="margin-top:.6rem">
+        保活是尽力而为，不是保证：手机不是服务器。App 在前台运行或充电时同步最快；日常随手打开一次 Syncthing-Fork，即可完成增量上传。
+      </div>
+    </section>
+
+    <!-- STEP 6: verify -->
+    <section class="card" data-step="6" hidden>
+      <div class="chead"><span class="sno">6</span><span class="ct">验证汇聚</span><span class="est">约 30 秒</span></div>
+      <div id="v-res"><div class="dim" style="font-size:.75rem;padding:.4rem 0">检查中…（最长约 2 秒）</div></div>
+      <div class="btnrow">
+        <button class="btn on" id="v-recheck">重新检查</button>
+      </div>
+      <div class="hint" style="margin-top:.6rem">
+        检查内容：节点最近一次收到手机数据的时间、当前在线的已配对设备数、节点各同步文件夹的文件数。
+      </div>
+    </section>
+
+  </main>
+
+  <nav class="gnav">
+    <button class="btn off" id="prev">上一步</button>
+    <span class="prog" id="prog">第 1 / 6 步</span>
+    <button class="btn on" id="next">下一步</button>
+  </nav>
+  <footer class="foot">飞狗 FlyGo · 手机汇聚引导 · 全部完成后可关闭本页</footer>
+</div>
+
+<script>
+// Standalone six-step flow. Data endpoints: /api/gather/* + the existing
+// /api/onboarding/syncthing-qr?text= QR renderer (same mechanism as the
+// panel phone view). All fetches are same-origin; failures render as
+// three-state hints, never as a broken page.
+'use strict';
+const $=id=>document.getElementById(id);
+const STEP_NAMES=['装组网','装同步','扫码配对','仅发送','保活','验证'];
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function j(u){const r=await fetch(u);if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}
+function stat(cls,text){return '<span class="dot '+cls+'"></span><span'+(cls?' class="'+cls+'"':'')+'>'+text+'</span>'}
+
+// --- QR (server-rendered SVG; ?text= encodes an arbitrary string) ---
+async function qrInto(boxId,text){
+  const box=$(boxId);
+  try{
+    const r=await j('/api/onboarding/syncthing-qr?text='+encodeURIComponent(text));
+    if(r&&r.ok&&r.qr_svg){box.innerHTML=r.qr_svg;return}
+  }catch(e){}
+  box.innerHTML='<div class="qrmiss">二维码生成失败——检查与节点的连接后重试</div>';
+}
+function bindQrToggle(btnId,wrapId,imgId,text){
+  $(btnId).addEventListener('click',async()=>{
+    const wrap=$(wrapId);
+    if(!wrap.hidden){wrap.hidden=true;return}
+    wrap.hidden=false;
+    $(imgId).innerHTML='<div class="qrmiss">生成中…</div>';
+    await qrInto(imgId,text);
+  });
+}
+bindQrToggle('qr-ts-btn','qr-ts','qr-ts-img','https://tailscale.com/download');
+bindQrToggle('qr-fd-btn','qr-fd','qr-fd-img','https://f-droid.org/packages/com.github.catfriend1.syncthingandroid/');
+
+// --- step navigation (dots are clickable; data loads lazily per step) ---
+let cur=1;
+const N=6;
+function go(n){
+  cur=Math.max(1,Math.min(N,n));
+  document.querySelectorAll('.card').forEach(c=>{c.hidden=+c.dataset.step!==cur});
+  document.querySelectorAll('.stp').forEach(s=>{
+    const k=+s.dataset.n;
+    s.classList.toggle('cur',k===cur);
+    s.classList.toggle('done',k<cur);
+  });
+  $('prev').disabled=cur===1;
+  $('next').disabled=cur===N;
+  $('prog').textContent='第 '+cur+' / '+N+' 步 · '+STEP_NAMES[cur-1];
+  if(cur===3)loadPair(false);
+  if(cur===6)loadVerify();
+  window.scrollTo({top:0});
+}
+$('prev').addEventListener('click',()=>go(cur-1));
+$('next').addEventListener('click',()=>go(cur+1));
+document.querySelectorAll('.stp').forEach(s=>{s.addEventListener('click',()=>go(+s.dataset.n))});
+
+// --- step 3: node pair data (three states: rest / config / down) ---
+let PAIR_LOADED=false;
+async function loadPair(force){
+  if(PAIR_LOADED&&!force)return;
+  PAIR_LOADED=true;
+  const stateEl=$('pair-state');
+  stateEl.innerHTML=stat('','读取节点信息…');
+  $('node-name').textContent='—';$('node-ip').textContent='—';$('node-id').textContent='—';
+  $('pair-qrwrap').hidden=true;
+  try{
+    const r=await j('/api/gather/pair-data');
+    $('node-name').textContent=r.node_name||'—';
+    $('node-ip').textContent=r.ts_ip||'（未获取）';
+    $('node-id').textContent=r.syncthing_id||'—';
+    if(r.syncthing_id){
+      $('pair-qrwrap').hidden=false;
+      qrInto('pair-qr',r.syncthing_id);
+    }
+    const dg=r.degraded||'';
+    if(!r.syncthing_id){
+      stateEl.innerHTML=stat('err','Syncthing 未运行，且无法从配置文件读取设备 ID。请先在节点电脑的面板「总览 → 管家组件」启动 Syncthing，再回来点「刷新节点信息」。');
+    }else if(r.source==='config'){
+      stateEl.innerHTML=stat('warn','Syncthing 未运行——设备 ID 读取自配置文件，可能不准确。建议先在节点上启动 Syncthing，再点「刷新节点信息」。');
+    }else{
+      stateEl.innerHTML=stat('ok','节点信息就绪（Syncthing 运行中）。');
+    }
+    if(dg.indexOf('tailscale')>=0&&!r.ts_ip){
+      stateEl.innerHTML+='<span class="dim">未读到 Tailscale IP（节点未装或未启动 Tailscale）。同一 WiFi 下可继续——Syncthing 会自动局域网发现。</span>';
+    }
+  }catch(e){
+    stateEl.innerHTML=stat('err','读取失败：'+esc(e.message)+'。确认手机与节点在同一网络（或双方 Tailscale 已连接），稍后重试。');
+  }
+}
+$('pair-refresh').addEventListener('click',()=>loadPair(true));
+
+// --- step 6: verify (degraded handling mirrors pair-data) ---
+const FSTATE={idle:'已同步',syncing:'同步中',scanning:'扫描中',error:'错误',unknown:'未知'};
+function ago(ts){
+  const d=Date.now()/1000-ts;
+  if(d<0)return '刚刚';
+  if(d<60)return Math.floor(d)+' 秒前';
+  if(d<3600)return Math.floor(d/60)+' 分钟前';
+  if(d<86400)return Math.floor(d/3600)+' 小时前';
+  return Math.floor(d/86400)+' 天前';
+}
+function fmtBytes(n){
+  if(n>=1073741824)return (n/1073741824).toFixed(1)+' GB';
+  if(n>=1048576)return (n/1048576).toFixed(1)+' MB';
+  if(n>=1024)return (n/1024).toFixed(1)+' KB';
+  return n+' B';
+}
+function fmtAbs(ts){
+  try{return new Date(ts*1000).toLocaleString('zh-CN',{hour12:false})}catch(e){return ''}
+}
+async function loadVerify(){
+  const box=$('v-res');
+  box.innerHTML='<div class="dim" style="font-size:.75rem;padding:.4rem 0">检查中…（最长约 2 秒）</div>';
+  try{
+    const r=await j('/api/gather/verify');
+    if(!r.syncthing_up){
+      box.innerHTML='<div class="alert err">Syncthing 未运行——本页读不到同步状态。请到节点电脑的面板「总览 → 管家组件」启动 Syncthing，然后点「重新检查」。</div>';
+      return;
+    }
+    if(!r.paired_count){
+      box.innerHTML='<div class="alert">尚未发现手机设备——回到第 3 步完成扫码配对（手机扫码 + 节点确认），再回来检查。</div>';
+      return;
+    }
+    let html='';
+    if((r.degraded||'').indexOf('connections')>=0){
+      html+='<div class="alert">连接状态暂不可读，以下为部分数据——稍后点「重新检查」。</div>';
+    }
+    const act=r.last_activity_unix?('<span class="ok">'+esc(ago(r.last_activity_unix))+'</span><div class="hint" style="margin:0">'+esc(fmtAbs(r.last_activity_unix))+'</div>'):'<span class="dim">尚无记录</span>';
+    html+='<div class="kv">'
+      +'<div class="m"><div class="lab">最近同步活动</div><div class="val">'+act+'</div></div>'
+      +'<div class="m"><div class="lab">在线设备 / 已配对</div><div class="val num">'+r.connected_count+' / '+r.paired_count+'</div></div>'
+      +'<div class="m"><div class="lab">节点文件总数</div><div class="val num">'+r.total_files+'</div></div>'
+      +'<div class="m"><div class="lab">累计接收</div><div class="val num">'+esc(fmtBytes(r.total_in_bytes))+'</div></div>'
+      +'</div>';
+    if(r.folders&&r.folders.length){
+      html+='<div style="margin-top:.6rem">'+r.folders.map(f=>{
+        const st=FSTATE[f.state]||f.state||'未知';
+        const cls=f.state==='error'?'err':(f.state==='idle'?'ok':(f.state==='unknown'?'dim':'warn'));
+        return '<div class="frow"><span class="dot '+(f.state==='error'?'err':(f.state==='idle'?'ok':''))+'"></span><span class="fn" title="'+esc(f.id)+'">'+esc(f.label||f.id)+'</span><span class="fs '+cls+'">'+st+' · '+f.local_files+' 个文件</span></div>';
+      }).join('')+'</div>';
+    }
+    if(!r.connected_count){
+      html+='<div class="alert">已配对 '+r.paired_count+' 台设备，当前都不在线——打开手机上的 Syncthing-Fork 并保持亮屏十几秒，再点「重新检查」。</div>';
+    }
+    box.innerHTML=html;
+  }catch(e){
+    box.innerHTML='<div class="alert err">检查失败：'+esc(e.message)+'。确认手机与节点在同一网络（或双方 Tailscale 已连接），稍后重试。</div>';
+  }
+}
+$('v-recheck').addEventListener('click',loadVerify);
+
+go(1);
+</script>
+</body>
+</html>

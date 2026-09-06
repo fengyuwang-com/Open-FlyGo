@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- FlyGo logo v5: blue gradient tile + large dog head silhouette, shifted upper-right.
+       Head center (310,235): x sits on the canvas golden-ratio point (512*0.618=316),
+       bbox width 318 = 61.8% of canvas (golden ratio), height 334 (65%).
+       Dog features: long muzzle, brow stop, big pointed ear, strong jaw, tilted-up snout. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A2E6E"/>
+      <stop offset="1" stop-color="#1A73E8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- speed lines: diagonal ascent, lower-left corner -->
+  <g stroke="#FFFFFF" stroke-linecap="round" fill="none">
+    <line x1="120" y1="444" x2="170" y2="394" stroke-width="8" opacity="0.35"/>
+    <line x1="124" y1="478" x2="168" y2="434" stroke-width="6" opacity="0.25"/>
+    <line x1="140" y1="496" x2="176" y2="460" stroke-width="5" opacity="0.15"/>
+  </g>
+  <!-- dog head silhouette, facing right, slightly tilted up -->
+  <path fill="#FFFFFF" d="
+    M 469 255
+    L 427 232
+    L 383 224
+    L 334 191
+    L 288 178
+    L 267 167
+    L 237 68
+    L 199 170
+    C 170 199 153 242 159 283
+    L 151 342
+    C 159 383 183 402 209 394
+    L 264 348
+    L 310 332
+    L 348 310
+    L 369 291
+    L 469 255
+    Z"/>
+  <!-- eye -->
+  <circle cx="321" cy="227" r="8.5" fill="#0A2E6E"/>
+  <!-- nose tip -->
+  <ellipse cx="464" cy="247" rx="7" ry="5" fill="#0A2E6E"/>
+</svg>

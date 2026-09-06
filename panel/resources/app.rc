@@ -1,0 +1,6 @@
+// FlyGo panel Windows resources.
+// The icon resource gives the .exe its file/taskbar/small-icon identity in
+// Explorer. Compiled by build.rs via windres into the linked binary.
+//
+// IDI_APP_ICON 101 - main application icon (multi-res ICO 16..256 px).
+101 ICON "resources\\flygo.ico"

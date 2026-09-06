@@ -1,0 +1,54 @@
+# FlyGo .gitignore
+# Keep this file pure ASCII (GBK/encoding-safe; see FengNAS repo warning).
+# Principle: no secrets, no binaries, no runtime artifacts in git.
+
+# ---------- build artifacts ----------
+target/
+target-verify/
+/dist/
+*.exe
+*.zip
+*.apk
+*.nupkg
+
+# ---------- runtime deployment dir (bin/ keeps runnable exe + apk; release/ is the tracked copy) ----------
+/bin/
+
+# ---------- machine-specific runtime config (per-machine SMB shares/paths; do NOT commit) ----------
+config/
+
+# ---------- secrets / keys (never commit) ----------
+term_token.env
+*.env
+alist_pass.txt
+*.bak
+.bak
+
+# ---------- scripts: local ops / launchers (may contain machine paths) ----------
+*.ps1
+*.bat
+*.cmd
+
+# ---------- runtime / state data ----------
+*.json
+*.log
+
+# ---------- Windows secpol / local admin artifacts (never commit) ----------
+secpol.jfm
+secpol.sdb
+*.reg
+
+# ---------- nested git worktrees (dev checkouts inside the main tree) ----------
+.wt-*/
+
+# ---------- runtime state dirs (uploads, control state, journals) ----------
+data/
+
+# ---------- debug / repro artifacts ----------
+docs/shots/
+scripts/shots/
+scripts/tmp_*/
+scripts/repro_*.js
+
+# ---------- WorkBuddy internal project data (tool memory; not business source) ----------
+.workbuddy/

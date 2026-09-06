@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlyGo 飞狗 — 你的数据，永远多副本、永远可用、永远在你手里</title>
+<meta name="description" content="闲置手机、旧电脑变成私有云节点：各设备数据自动汇聚，节点之间实时互备，同步走设备间 P2P 直连、不经平台。AGPL v3 开源，本地功能免费。">
+<link rel="canonical" href="https://flygo.fengyuwang.com/">
+<!-- Open Graph (site-only, per DESIGN.md official-site scope). og:image is
+     intentionally omitted until a raster share image exists; nothing external
+     may be referenced from this single-file page. -->
+<meta property="og:site_name" content="FlyGo 飞狗">
+<meta property="og:type" content="website">
+<meta property="og:title" content="FlyGo 飞狗 — 私有云数据平台">
+<meta property="og:description" content="闲置手机、旧电脑变成私有云节点：数据自动汇聚、节点互备、设备间 P2P 直连。你的数据，永远多副本、永远可用、永远在你手里。">
+<meta property="og:url" content="https://flygo.fengyuwang.com/">
+<!-- Favicon: logo/flydog-logo.svg inlined as base64 data URI (zero external deps). -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiI+CiAgPCEtLSBGbHlHbyBsb2dvIHY1OiBibHVlIGdyYWRpZW50IHRpbGUgKyBsYXJnZSBkb2cgaGVhZCBzaWxob3VldHRlLCBzaGlmdGVkIHVwcGVyLXJpZ2h0LgogICAgICAgSGVhZCBjZW50ZXIgKDMxMCwyMzUpOiB4IHNpdHMgb24gdGhlIGNhbnZhcyBnb2xkZW4tcmF0aW8gcG9pbnQgKDUxMiowLjYxOD0zMTYpLAogICAgICAgYmJveCB3aWR0aCAzMTggPSA2MS44JSBvZiBjYW52YXMgKGdvbGRlbiByYXRpbyksIGhlaWdodCAzMzQgKDY1JSkuCiAgICAgICBEb2cgZmVhdHVyZXM6IGxvbmcgbXV6emxlLCBicm93IHN0b3AsIGJpZyBwb2ludGVkIGVhciwgc3Ryb25nIGphdywgdGlsdGVkLXVwIHNub3V0LiAtLT4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjMEEyRTZFIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzFBNzNFOCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSIxMTIiIGZpbGw9InVybCgjYmcpIi8+CiAgPCEtLSBzcGVlZCBsaW5lczogZGlhZ29uYWwgYXNjZW50LCBsb3dlci1sZWZ0IGNvcm5lciAtLT4KICA8ZyBzdHJva2U9IiNGRkZGRkYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgZmlsbD0ibm9uZSI+CiAgICA8bGluZSB4MT0iMTIwIiB5MT0iNDQ0IiB4Mj0iMTcwIiB5Mj0iMzk0IiBzdHJva2Utd2lkdGg9IjgiIG9wYWNpdHk9IjAuMzUiLz4KICAgIDxsaW5lIHgxPSIxMjQiIHkxPSI0NzgiIHgyPSIxNjgiIHkyPSI0MzQiIHN0cm9rZS13aWR0aD0iNiIgb3BhY2l0eT0iMC4yNSIvPgogICAgPGxpbmUgeDE9IjE0MCIgeTE9IjQ5NiIgeDI9IjE3NiIgeTI9IjQ2MCIgc3Ryb2tlLXdpZHRoPSI1IiBvcGFjaXR5PSIwLjE1Ii8+CiAgPC9nPgogIDwhLS0gZG9nIGhlYWQgc2lsaG91ZXR0ZSwgZmFjaW5nIHJpZ2h0LCBzbGlnaHRseSB0aWx0ZWQgdXAgLS0+CiAgPHBhdGggZmlsbD0iI0ZGRkZGRiIgZD0iCiAgICBNIDQ2OSAyNTUKICAgIEwgNDI3IDIzMgogICAgTCAzODMgMjI0CiAgICBMIDMzNCAxOTEKICAgIEwgMjg4IDE3OAogICAgTCAyNjcgMTY3CiAgICBMIDIzNyA2OAogICAgTCAxOTkgMTcwCiAgICBDIDE3MCAxOTkgMTUzIDI0MiAxNTkgMjgzCiAgICBMIDE1MSAzNDIKICAgIEMgMTU5IDM4MyAxODMgNDAyIDIwOSAzOTQKICAgIEwgMjY0IDM0OAogICAgTCAzMTAgMzMyCiAgICBMIDM0OCAzMTAKICAgIEwgMzY5IDI5MQogICAgTCA0NjkgMjU1CiAgICBaIi8+CiAgPCEtLSBleWUgLS0+CiAgPGNpcmNsZSBjeD0iMzIxIiBjeT0iMjI3IiByPSI4LjUiIGZpbGw9IiMwQTJFNkUiLz4KICA8IS0tIG5vc2UgdGlwIC0tPgogIDxlbGxpcHNlIGN4PSI0NjQiIGN5PSIyNDciIHJ4PSI3IiByeT0iNSIgZmlsbD0iIzBBMkU2RSIvPgo8L3N2Zz4K">
+<meta name="theme-color" content="#f3f5f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+<style>
+/* ============================================================
+   FlyGo official site — single-file static page.
+   Design tokens follow repo DESIGN.md (UI constitution):
+   cold slate + single accent blue, weight discipline 400/500/600,
+   dark mode as two explicit value sets, borders over shadows.
+   Code comments in English; all visible copy in Chinese.
+   ------------------------------------------------------------
+   Site-only scale extensions (registered here, derived from
+   docs/ui-design-guide.md §4-§6 which targets the tool panel):
+   - Display type: D1 hero clamp(1.75rem,4.5vw,2.5rem),
+     D2 section title 1.6rem (panel scale tops at 1.15rem).
+   - Section rhythm: 2.8rem = 2 x S4 vertical gap between sections.
+   - Hero gradient uses the logo brand stops (#0A2E6E -> #1A73E8),
+     darkened slightly for dark theme (two explicit values).
+   ============================================================ */
+
+/* --- Light theme tokens (DESIGN.md §2) --- */
+:root {
+  --bg: #f3f5f8;
+  --panel: #ffffff;
+  --panel2: #f0f2f6;
+  --border: #dbe0ea;
+  --text: #1a2433;
+  --muted: #5b6b80;
+  --accent: #2563eb;
+  --accent-bg: #e3ecfb;
+  --on-accent: #ffffff;          /* text on accent-filled controls */
+  --hero-a: #0a2e6e;             /* hero gradient start (brand) */
+  --hero-b: #1a73e8;             /* hero gradient end (brand) */
+  --hero-fg: #ffffff;            /* text on hero gradient */
+  --hero-btn-bg: #ffffff;        /* primary CTA on hero (inverted) */
+  --hero-btn-fg: #0a2e6e;
+  --hero-btn-border: rgba(255, 255, 255, .55);
+  --hero-sub: rgba(255, 255, 255, .82);
+  --fs-s3: .68rem;               /* guide S3: small notes */
+  --fs-s2: .75rem;               /* guide S2: secondary copy */
+  --fs-s1: .8rem;                /* guide S1: body */
+  --fs-s0: .9rem;                /* guide S0: emphasized body */
+  --fs-t1: 1.05rem;              /* guide T1 */
+  --fs-d2: 1.6rem;               /* site D2: section title */
+  --fs-d1: clamp(1.75rem, 4.5vw, 2.5rem); /* site D1: hero title */
+  color-scheme: light;
+}
+
+/* --- Dark theme: second explicit value set (DESIGN.md §2) --- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1115;
+    --panel: #15181e;
+    --panel2: #1a1e26;
+    --border: #262c36;
+    --text: #e5e7eb;
+    --muted: #8b93a1;
+    --accent: #4c9aff;
+    --accent-bg: #20314a;
+    --on-accent: #0f1115;        /* dark text reads better on #4c9aff */
+    --hero-a: #081f4d;
+    --hero-b: #1558b8;
+    --hero-fg: #ffffff;
+    --hero-btn-bg: #ffffff;
+    --hero-btn-fg: #081f4d;
+    --hero-btn-border: rgba(255, 255, 255, .5);
+    --hero-sub: rgba(255, 255, 255, .78);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1115;
+  --panel: #15181e;
+  --panel2: #1a1e26;
+  --border: #262c36;
+  --text: #e5e7eb;
+  --muted: #8b93a1;
+  --accent: #4c9aff;
+  --accent-bg: #20314a;
+  --on-accent: #0f1115;
+  --hero-a: #081f4d;
+  --hero-b: #1558b8;
+  --hero-fg: #ffffff;
+  --hero-btn-bg: #ffffff;
+  --hero-btn-fg: #081f4d;
+  --hero-btn-border: rgba(255, 255, 255, .5);
+  --hero-sub: rgba(255, 255, 255, .78);
+  color-scheme: dark;
+}
+
+/* --- Base --- */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Microsoft YaHei", "PingFang SC", "Noto Sans SC",
+    "Helvetica Neue", Roboto, Arial, sans-serif;
+  font-size: var(--fs-s1);
+  font-weight: 400;
+  line-height: 1.65;
+}
+h1, h2, h3 { margin: 0; font-weight: 600; line-height: 1.35; }
+h2 { font-size: var(--fs-d2); }
+h3 { font-size: var(--fs-s0); }
+p { margin: 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.wrap { max-width: 960px; margin: 0 auto; padding: 0 1rem; }
+section { padding: 2.8rem 0 0; }   /* site section rhythm = 2 x S4 */
+.sub { color: var(--muted); font-size: var(--fs-s0); margin-top: .4rem; max-width: 42em; }
+
+/* --- Top nav --- */
+.topnav {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.topnav .wrap {
+  display: flex; align-items: center; gap: 1rem;
+  min-height: 52px; /* structural fixed height, panel top-bar convention */
+}
+.brand { display: inline-flex; align-items: center; gap: .4rem; font-weight: 600; color: var(--text); }
+.brand svg { width: 26px; height: 26px; display: block; }
+.navlinks { display: flex; gap: .7rem; margin-left: auto; font-size: var(--fs-s2); }
+.navlinks a { color: var(--muted); }
+.navlinks a:hover { color: var(--accent); text-decoration: none; }
+.theme-btn {
+  font: inherit; font-size: var(--fs-s2); font-weight: 500;
+  color: var(--text); background: var(--panel);
+  border: 1px solid var(--border); border-radius: 6px; /* R1 control */
+  padding: .25rem .55rem; cursor: pointer;
+}
+
+/* --- Hero: brand blue gradient (task-mandated exception) --- */
+.hero {
+  background: linear-gradient(135deg, var(--hero-a), var(--hero-b));
+  color: var(--hero-fg);
+  padding: 3.6rem 0 3.2rem;
+  text-align: center;
+}
+.hero .logo-big { width: 88px; height: 88px; display: block; margin: 0 auto 1rem; }
+.hero h1 { font-size: var(--fs-d1); max-width: 21em; margin: 0 auto; }
+.hero .lede {
+  color: var(--hero-sub); font-size: var(--fs-s0);
+  max-width: 36em; margin: .7rem auto 0;
+}
+.hero .ctas { display: flex; justify-content: center; gap: .7rem; flex-wrap: wrap; margin-top: 1.4rem; }
+.hero .note {
+  color: var(--hero-sub); font-size: var(--fs-s3); margin-top: .7rem;
+}
+
+/* --- Buttons --- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: var(--fs-s1); font-weight: 600;
+  padding: .55rem 1rem; border-radius: 6px; /* R1 */
+  border: 1px solid transparent; cursor: pointer; text-decoration: none;
+}
+.btn:hover { text-decoration: none; filter: brightness(1.06); }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-secondary { background: var(--panel); color: var(--accent); border-color: var(--border); }
+.hero .btn-primary { background: var(--hero-btn-bg); color: var(--hero-btn-fg); }
+.hero .btn-secondary {
+  background: transparent; color: var(--hero-fg); border-color: var(--hero-btn-border);
+}
+
+/* --- Cards (borders over shadows, per DESIGN.md §3) --- */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px; /* R3 panel */
+  padding: .7rem;
+}
+.nc-title { font-size: var(--fs-s1); font-weight: 600; }
+.nc-sub { font-size: var(--fs-s2); color: var(--muted); margin-top: .25rem; }
+.nc-note {
+  font-size: var(--fs-s3); color: var(--muted);
+  margin-top: .4rem; padding-top: .4rem; border-top: 1px solid var(--border);
+}
+
+/* --- Architecture diagram (pure CSS blocks + connectors) --- */
+.arch {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px minmax(0, 1.1fr) 92px minmax(0, 1fr);
+  gap: .7rem; align-items: center; margin-top: 1rem;
+}
+.arch-col { display: flex; flex-direction: column; gap: .55rem; min-width: 0; }
+.dlist { list-style: none; margin: .4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .25rem; }
+.dlist li { padding-left: .7rem; position: relative; font-size: var(--fs-s2); }
+.dlist li::before {
+  content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+}
+/* Horizontal connector: label above a solid accent line with arrowhead */
+.conn { display: flex; flex-direction: column; align-items: center; gap: .4rem; min-width: 0; }
+.conn .cl { font-size: var(--fs-s3); color: var(--muted); text-align: center; line-height: 1.4; }
+.conn .line { position: relative; width: 100%; height: 1px; background: var(--accent); }
+.conn .line::after {
+  content: ""; position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  border-left: 7px solid var(--accent);
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+}
+/* Control-plane link: dashed muted line — metadata only, never file data */
+.conn.dashed .line { background: transparent; height: 0; border-top: 1px dashed var(--muted); }
+.conn.dashed .line::after { border-left-color: var(--muted); }
+/* Vertical bidirectional connector between the two nodes */
+.vconn { display: flex; align-items: center; justify-content: center; gap: .4rem; padding: .1rem 0; }
+.vconn .vline { position: relative; width: 1px; height: 40px; background: var(--accent); }
+.vconn .vline::before {
+  content: ""; position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+  border-bottom: 7px solid var(--accent);
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+}
+.vconn .vline::after {
+  content: ""; position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%);
+  border-top: 7px solid var(--accent);
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+}
+.vconn .vlabel { font-size: var(--fs-s3); color: var(--muted); }
+.legend { display: flex; flex-direction: column; gap: .25rem; margin-top: 1rem; font-size: var(--fs-s3); color: var(--muted); }
+.legend .sw {
+  display: inline-block; width: 28px; height: 0;
+  border-top: 2px solid var(--accent); vertical-align: middle; margin-right: .4rem;
+}
+.legend .sw.dash { border-top-style: dashed; border-top-color: var(--muted); }
+
+/* --- Features grid (2x2 desktop, 1 column mobile) --- */
+.feat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; margin-top: 1rem; }
+.feat-grid .card { padding: 1rem; }
+.feat-grid h3 { margin-bottom: .4rem; }
+.feat-grid p { font-size: var(--fs-s2); color: var(--muted); }
+
+/* --- Pricing --- */
+.price-table-wrap { overflow-x: auto; margin-top: 1rem; border: 1px solid var(--border); border-radius: 10px; }
+table.price { width: 100%; border-collapse: collapse; background: var(--panel); font-size: var(--fs-s1); }
+table.price th, table.price td {
+  border: 1px solid var(--border);
+  padding: .55rem .7rem; text-align: left; vertical-align: top;
+}
+table.price thead th { background: var(--panel2); font-weight: 600; }
+table.price td.rowlab, table.price th.rowlab { color: var(--muted); font-weight: 400; width: 6.5em; }
+table.price .col-hot { background: var(--accent-bg); }
+.badge {
+  display: inline-block; margin-left: .4rem;
+  font-size: var(--fs-s3); font-weight: 500;
+  color: var(--accent); background: var(--panel);
+  border: 1px solid var(--border); border-radius: 6px; padding: 0 .4rem;
+}
+.freemium { margin-top: .7rem; }
+.freemium .split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; margin-top: .55rem; }
+.freemium ul { list-style: none; margin: .4rem 0 0; padding: 0; }
+.freemium li { position: relative; padding-left: .7rem; font-size: var(--fs-s2); color: var(--muted); }
+.freemium li::before {
+  content: ""; position: absolute; left: 0; top: .55em;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+}
+.freemium li.free::before { background: var(--muted); }
+
+/* --- Download --- */
+.dl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; margin-top: 1rem; }
+.dl-grid .card { padding: 1rem; }
+.dl-grid h3 { margin-bottom: .4rem; }
+.dl-grid p { font-size: var(--fs-s2); color: var(--muted); }
+.dl-grid .path { font-size: var(--fs-s3); color: var(--muted); word-break: break-all; }
+.dl-grid .btn { margin-top: .7rem; }
+.dl-note { font-size: var(--fs-s3); color: var(--muted); margin-top: .4rem; }
+
+/* --- FAQ (native details/summary, no JS needed) --- */
+.faq { display: flex; flex-direction: column; gap: .55rem; margin-top: 1rem; }
+.faq details {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: .55rem .7rem;
+}
+.faq summary { font-weight: 500; cursor: pointer; font-size: var(--fs-s0); }
+.faq details[open] { background: var(--panel2); }
+.faq details p { margin-top: .4rem; font-size: var(--fs-s2); color: var(--muted); }
+
+/* --- Footer --- */
+footer { margin-top: 2.8rem; border-top: 1px solid var(--border); padding: 1rem 0 1.4rem; }
+.foot { display: flex; flex-wrap: wrap; gap: .4rem 1.4rem; font-size: var(--fs-s3); color: var(--muted); }
+.foot .ver { margin-left: auto; }
+
+/* --- Single breakpoint: 768px --- */
+@media (max-width: 767.98px) {
+  .navlinks { display: none; }
+  .feat-grid, .dl-grid, .freemium .split { grid-template-columns: minmax(0, 1fr); }
+  /* Diagram stacks vertically; horizontal connectors become vertical */
+  .arch { grid-template-columns: minmax(0, 1fr); }
+  .conn { gap: .25rem; }
+  .conn .line { width: 1px; height: 32px; }
+  .conn .line::after {
+    right: auto; left: 50%; top: auto; bottom: 0; transform: translateX(-50%);
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-top: 7px solid var(--accent); border-bottom: none;
+  }
+  .conn.dashed .line { height: 32px; border-top: none; border-left: 1px dashed var(--muted); }
+  .conn.dashed .line::after { border-top-color: var(--muted); }
+  .foot .ver { margin-left: 0; }
+}
+</style>
+<noscript><style>#themeToggle{display:none}</style></noscript>
+</head>
+<body>
+
+<!-- ============ Top navigation ============ -->
+<nav class="topnav">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="FlyGo 飞狗 首页">
+      <!-- Inline logo (same artwork as logo/flydog-logo.svg) -->
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true">
+        <defs>
+          <linearGradient id="navbg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#0A2E6E"/><stop offset="1" stop-color="#1A73E8"/>
+          </linearGradient>
+        </defs>
+        <rect width="512" height="512" rx="112" fill="url(#navbg)"/>
+        <path fill="#FFFFFF" d="M 469 255 L 427 232 L 383 224 L 334 191 L 288 178 L 267 167 L 237 68 L 199 170 C 170 199 153 242 159 283 L 151 342 C 159 383 183 402 209 394 L 264 348 L 310 332 L 348 310 L 369 291 L 469 255 Z"/>
+        <circle cx="321" cy="227" r="8.5" fill="#0A2E6E"/>
+        <ellipse cx="464" cy="247" rx="7" ry="5" fill="#0A2E6E"/>
+      </svg>
+      FlyGo 飞狗
+    </a>
+    <div class="navlinks">
+      <a href="#arch">链路</a>
+      <a href="#features">特性</a>
+      <a href="#pricing">定价</a>
+      <a href="#download">下载</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <button id="themeToggle" class="theme-btn" type="button" aria-pressed="false">深色</button>
+  </div>
+</nav>
+
+<!-- ============ Hero ============ -->
+<header class="hero" id="top">
+  <div class="wrap">
+    <svg class="logo-big" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="FlyGo 飞狗标志">
+      <defs>
+        <linearGradient id="herobg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#0A2E6E"/><stop offset="1" stop-color="#1A73E8"/>
+        </linearGradient>
+      </defs>
+      <rect width="512" height="512" rx="112" fill="url(#herobg)"/>
+      <g stroke="#FFFFFF" stroke-linecap="round" fill="none">
+        <line x1="120" y1="444" x2="170" y2="394" stroke-width="8" opacity="0.35"/>
+        <line x1="124" y1="478" x2="168" y2="434" stroke-width="6" opacity="0.25"/>
+        <line x1="140" y1="496" x2="176" y2="460" stroke-width="5" opacity="0.15"/>
+      </g>
+      <path fill="#FFFFFF" d="M 469 255 L 427 232 L 383 224 L 334 191 L 288 178 L 267 167 L 237 68 L 199 170 C 170 199 153 242 159 283 L 151 342 C 159 383 183 402 209 394 L 264 348 L 310 332 L 348 310 L 369 291 L 469 255 Z"/>
+      <circle cx="321" cy="227" r="8.5" fill="#0A2E6E"/>
+      <ellipse cx="464" cy="247" rx="7" ry="5" fill="#0A2E6E"/>
+    </svg>
+    <h1>你的数据，永远多副本、永远可用、永远在你手里</h1>
+    <p class="lede">一台闲置手机或旧电脑，就是一台私有云节点：各设备的数据自动汇聚到节点，节点之间实时互为备份。文件同步走设备间 P2P 直连，不经过任何平台服务器。</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="#download">下载 FlyGo</a>
+      <a class="btn btn-secondary" href="https://github.com/fengyuwang-com/FlyGo" target="_blank" rel="noopener">查看源码</a>
+    </div>
+    <p class="note">AGPL v3 开源 · 本地功能免费 · 付费购买的是服务</p>
+  </div>
+</header>
+
+<main>
+
+<!-- ============ Three-link architecture ============ -->
+<section id="arch">
+  <div class="wrap">
+    <h2>三条链路：数据怎么流</h2>
+    <p class="sub">数据链路与控制链路分离：文件走设备间 P2P 直连，控制面只处理元数据，不接触文件内容。</p>
+    <div class="arch" role="img" aria-label="架构示意：各设备数据自动汇聚到飞狗节点，两个节点之间实时互备，控制面只走元数据、不经过文件内容">
+      <div class="arch-col">
+        <div class="card">
+          <div class="nc-title">你的设备（数据源）</div>
+          <ul class="dlist">
+            <li>手机相册</li>
+            <li>电脑文档</li>
+            <li>相机存储卡</li>
+          </ul>
+        </div>
+      </div>
+      <div class="conn" aria-hidden="true">
+        <span class="cl">数据汇聚<br>自动同步</span>
+        <span class="line"></span>
+      </div>
+      <div class="arch-col">
+        <div class="card">
+          <div class="nc-title">飞狗节点 A</div>
+          <div class="nc-sub">闲置手机 / 旧电脑 · 存储 + 计算</div>
+        </div>
+        <div class="vconn" aria-hidden="true">
+          <span class="vline"></span>
+          <span class="vlabel">实时互备</span>
+        </div>
+        <div class="card">
+          <div class="nc-title">飞狗节点 B</div>
+          <div class="nc-sub">第二台设备 · 镜像副本</div>
+        </div>
+      </div>
+      <div class="conn dashed" aria-hidden="true">
+        <span class="cl">元数据<br>密钥 / 节点状态</span>
+        <span class="line"></span>
+      </div>
+      <div class="arch-col">
+        <div class="card">
+          <div class="nc-title">控制面</div>
+          <div class="nc-sub">身份与激活码 · 订阅状态 · 心跳</div>
+          <div class="nc-note">只收元数据，不碰文件内容</div>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i class="sw"></i>数据链路：设备 → 节点、节点 ↔ 节点，P2P 直连（Tailscale + Syncthing），不经平台</span>
+      <span><i class="sw dash"></i>控制链路：只走元数据（密钥、节点列表、状态），文件内容不经过控制面</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Features ============ -->
+<section id="features">
+  <div class="wrap">
+    <h2>产品形态</h2>
+    <p class="sub">对外交付只有两个文件，内部复杂度全部封装。</p>
+    <div class="feat-grid">
+      <div class="card">
+        <h3>1 个 EXE + 1 个 APK</h3>
+        <p>电脑端一个可执行文件，手机端一个安装包。Docker、内网穿透、命令行的复杂度都在软件内部消化，拿到即用。</p>
+      </div>
+      <div class="card">
+        <h3>按需启动，不常驻空转</h3>
+        <p>常驻内存十几到几十 MB。点开媒体中心才拉起容器，存储在被访问时才挂载；用完即停，不占后台。</p>
+      </div>
+      <div class="card">
+        <h3>数据不经平台</h3>
+        <p>同步在设备之间 P2P 直连完成，文件不经过飞狗服务器。控制面只处理元数据，平台无权限读取或删除文件。</p>
+      </div>
+      <div class="card">
+        <h3>设备无关</h3>
+        <p>闲置手机、旧电脑、移动硬盘都能当节点。节点损坏后换任意设备，扫码激活，数据从其他节点自动恢复。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Pricing ============ -->
+<section id="pricing">
+  <div class="wrap">
+    <h2>定价</h2>
+    <p class="sub">软件本地功能全部免费；订阅购买的是服务——控制面组网、跨设备互备编排、硬件换新保障。</p>
+    <div class="price-table-wrap">
+      <table class="price">
+        <thead>
+          <tr>
+            <th class="rowlab" scope="col"></th>
+            <th class="col-hot" scope="col">双保险版<span class="badge">主力</span></th>
+            <th scope="col">单机版</th>
+            <th scope="col">三节点版</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th class="rowlab" scope="row">年费</th>
+            <td class="col-hot">499 元 / 年</td>
+            <td>299 元 / 年</td>
+            <td>999 元 / 年</td>
+          </tr>
+          <tr>
+            <th class="rowlab" scope="row">自带设备</th>
+            <td class="col-hot">2 台，互为备份</td>
+            <td>1 台</td>
+            <td>3 台，可分布三地</td>
+          </tr>
+          <tr>
+            <th class="rowlab" scope="row">数据副本</th>
+            <td class="col-hot">设备本地 + 双节点 = 3 份以上</td>
+            <td>设备本地 + 节点 = 2 份</td>
+            <td>设备本地 + 三节点 = 4 份以上</td>
+          </tr>
+          <tr>
+            <th class="rowlab" scope="row">适合</th>
+            <td class="col-hot">家庭数据集合</td>
+            <td>个人数据集合</td>
+            <td>企业 / 极客</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card freemium">
+      <h3>免费与付费的边界</h3>
+      <div class="split">
+        <div>
+          <div class="nc-sub">免费（本地功能，无期限）</div>
+          <ul>
+            <li class="free">面板、文件服务、终端、监控</li>
+            <li class="free">局域网同步、镜像备份</li>
+          </ul>
+        </div>
+        <div>
+          <div class="nc-sub">付费（订阅激活的服务）</div>
+          <ul>
+            <li>控制面组网（身份、激活码、心跳）</li>
+            <li>跨设备互备编排、硬件换新保障、Pro 增值</li>
+          </ul>
+        </div>
+      </div>
+      <p class="dl-note">订阅到期只停服务，不停本地功能与已有数据。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Download ============ -->
+<section id="download">
+  <div class="wrap">
+    <h2>下载</h2>
+    <p class="sub">手机版与电脑版各自一个文件，安装后即可使用本地功能。</p>
+    <div class="dl-grid">
+      <div class="card">
+        <h3>手机版（Android APK）</h3>
+        <p class="path">bin/flygo-mobile-1.0.0-20260817-debug.apk（调试构建）</p>
+        <a class="btn btn-primary" href="bin/flygo-mobile-1.0.0-20260817-debug.apk" download>下载 APK</a>
+        <p class="dl-note">安装后打开 App，扫码或输入激活码激活服务；不激活也可使用本地功能。</p>
+      </div>
+      <div class="card">
+        <h3>电脑版（Windows / macOS / Linux）</h3>
+        <p>单文件可执行，无需安装。三个平台的构建都在 GitHub Releases 提供，源码在同一仓库（AGPL v3）。</p>
+        <a class="btn btn-secondary" href="https://github.com/fengyuwang-com/FlyGo" target="_blank" rel="noopener">前往 GitHub Releases</a>
+        <p class="dl-note">github.com/fengyuwang-com/FlyGo</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section id="faq">
+  <div class="wrap">
+    <h2>常见问题</h2>
+    <div class="faq">
+      <details>
+        <summary>AGPL 是什么？</summary>
+        <p>FlyGo 按 AGPL v3 协议开源：任何人都可以免费使用、修改和分发软件；基于修改版本提供网络服务时，同样需要开放修改后的源码。对普通使用没有影响——本地功能免费、无期限，也不需要激活码。</p>
+      </details>
+      <details>
+        <summary>订阅激活了什么？</summary>
+        <p>激活的是服务，不是软件：控制面组网（身份、激活码、心跳）、跨设备互备编排、硬件换新保障（非人为故障跨品牌换新）。面板、文件服务、局域网同步、镜像备份等本地功能不订阅也完整可用；订阅到期只停服务，不停本地功能与已有数据。</p>
+      </details>
+      <details>
+        <summary>需要什么设备？</summary>
+        <p>节点用闲置设备即可：安卓手机（建议 Android 12 及以上、存储 1TB 起）或任意 Windows / macOS / Linux 电脑。使用端：手机安装 APK，电脑运行单文件可执行程序。版本对应节点数量：单机版 1 台、双保险版 2 台、三节点版 3 台。</p>
+      </details>
+      <details>
+        <summary>我的数据在哪？</summary>
+        <p>数据只存在自己的设备里：原始数据在各设备本地一份，汇聚到节点一份，多节点再互备一份。同步走设备间 P2P 直连（Tailscale + Syncthing），文件内容不经过飞狗服务器；飞狗无权限读取或删除文件。</p>
+      </details>
+      <details>
+        <summary>断网能用吗？</summary>
+        <p>局域网内的同步与文件访问不依赖外网。断网期间，已同步的数据在本地照常可用；网络恢复后，设备之间自动比对差异并补齐，外网访问（Tailscale）也同时恢复。</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ Footer ============ -->
+<footer>
+  <div class="wrap foot">
+    <span>FlyGo（飞狗）· AGPL v3 开源</span>
+    <span>flygo.fengyuwang.com</span>
+    <!-- contact placeholder: swap the GitHub Issues link for the official
+         email / WeChat channel before public launch -->
+    <span>联系方式：<a href="https://github.com/fengyuwang-com/FlyGo/issues" target="_blank" rel="noopener">GitHub Issues</a></span>
+    <span class="ver">版本 2026.08.16-2001</span>
+  </div>
+</footer>
+
+<script>
+/* Theme toggle: persisted explicit override on top of prefers-color-scheme.
+   CSS above keeps two full token sets; JS only flips data-theme. */
+(function () {
+  var KEY = "flygo-site-theme";
+  var root = document.documentElement;
+  var btn = document.getElementById("themeToggle");
+  if (!btn) return;
+  function stored() {
+    try { return localStorage.getItem(KEY); } catch (e) { return null; }
+  }
+  function systemDark() {
+    return window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  function apply(theme) {
+    root.setAttribute("data-theme", theme);
+    btn.textContent = theme === "dark" ? "浅色" : "深色";
+    btn.setAttribute("aria-pressed", String(theme === "dark"));
+  }
+  apply(stored() || (systemDark() ? "dark" : "light"));
+  btn.addEventListener("click", function () {
+    var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    try { localStorage.setItem(KEY, next); } catch (e) { /* private mode */ }
+    apply(next);
+  });
+})();
+</script>
+</body>
+</html>
