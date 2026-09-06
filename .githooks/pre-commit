@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# FlyGo pre-commit hook - blocks commits that would add sensitive files.
+# Enforces AGENTS.md rule #2 via scripts/check-secrets.sh (path rules +
+# content rules). Delegates to the script so CI and manual runs use the
+# exact same checks.
+#
+# Install (per-repo, shared by every worktree of this clone):
+#   git config core.hooksPath .githooks
+#
+# Skip for a single commit (not recommended):
+#   git commit --no-verify
+set -u
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 1
+exec bash "$root/scripts/check-secrets.sh" --staged

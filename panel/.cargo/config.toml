@@ -1,0 +1,14 @@
+# FlyGo：使用 stable-x86_64-pc-windows-gnu 工具链。
+# 编译期 HOST=GNU（rustc+ld 自带上），链接用完整 MinGW-w64 binutils
+# （已装 C:\ProgramData\mingw64\mingw64\bin，含 as/dlltool/objdump，已加入 PATH）。
+# 全程无需 MSVC / Windows SDK。
+
+# 依赖源：优先国内 rsproxy 镜像，加快/稳定下载
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+
+[net]
+git-fetch-with-cli = true

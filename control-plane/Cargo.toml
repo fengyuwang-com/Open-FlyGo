@@ -1,0 +1,31 @@
+[package]
+name = "flygo-control-plane"
+version = "0.1.0"
+edition = "2021"
+description = "FlyGo control plane - identity + subscription + heartbeat (Rust + axum + SQLite)"
+authors = ["FlyGo Developers"]
+
+# Single-binary, memory-first profile (mirrors the FlyGo panel).
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+
+[dependencies]
+axum = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# bundled = compile SQLite from source, no system dependency (Windows friendly)
+rusqlite = { version = "0.40", features = ["bundled"] }
+jsonwebtoken = "9"
+rand = "0.8"
+chrono = "0.4"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

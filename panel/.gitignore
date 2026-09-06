@@ -1,0 +1,7 @@
+/target
+Cargo.lock
+
+# 终端密钥（密码 + webcli token），不进 git
+term_token.env
+# alist/OpenList 密码，不进 git
+alist_pass.txt

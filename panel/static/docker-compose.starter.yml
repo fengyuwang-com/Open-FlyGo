@@ -1,0 +1,40 @@
+# FlyGo starter pack (G-02) - bundled minimal services wall seed.
+# Written to <install root>/data/docker-compose.yml on first boot when no
+# other compose file is configured. Edit freely; the panel only reads it.
+services:
+  alist:
+    image: xhofe/alist:latest
+    container_name: alist
+    ports:
+      - "5244:5244"
+    volumes:
+      - alist-data:/opt/alist/data
+    restart: unless-stopped
+
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    ports:
+      - "8096:8096"
+    volumes:
+      - jellyfin-config:/config
+      - jellyfin-cache:/cache
+    restart: unless-stopped
+
+  # Immich needs 3+ containers (server / machine-learning / postgres).
+  # Uncomment the block below when you want the photo library, then run
+  # "docker compose up -d" again. Full guide: https://immich.app/docs
+  # immich-server:
+  #   image: ghcr.io/immich-app/immich-server:release
+  #   container_name: immich_server
+  #   ports:
+  #     - "2283:2283"
+  #   volumes:
+  #     - immich-upload:/usr/src/app/upload
+  #   restart: unless-stopped
+
+volumes:
+  alist-data:
+  jellyfin-config:
+  jellyfin-cache:
+  # immich-upload:

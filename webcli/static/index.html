@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>FlyGo Terminal</title>
+<link rel="stylesheet" href="vendor/xterm/xterm.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1115;
+    --statusbar-bg: #161a21;
+    --border: #242a33;
+    --fg: #d6dde9;
+    --dim: #7a8496;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --err: #ef4444;
+  }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    overflow: hidden;
+    font-family: "SF Mono", "Menlo", "Consolas", "Courier New", monospace;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    height: 100dvh;
+  }
+
+  /* ---- 顶部状态栏: 固定 28px ---- */
+  #statusbar {
+    flex: 0 0 28px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    background: var(--statusbar-bg);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    line-height: 1;
+    user-select: none;
+  }
+  #statusbar .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--dim); flex: 0 0 auto;
+  }
+  #statusbar .dot.connected    { background: var(--ok);   box-shadow: 0 0 6px var(--ok); }
+  #statusbar .dot.connecting   { background: var(--warn); box-shadow: 0 0 6px var(--warn); animation: pulse 1s infinite; }
+  #statusbar .dot.disconnected { background: var(--err); }
+  #statusbar .label { color: var(--fg); white-space: nowrap; }
+  #statusbar .wsaddr {
+    margin-left: auto;
+    color: var(--dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl; /* 长地址从右侧截断 */
+  }
+  #statusbar .credit { color: var(--dim); opacity: .7; white-space: nowrap; padding-left: 8px; border-left: 1px solid var(--border); }
+
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+  /* ---- 终端容器: 占满剩余视口 ---- */
+  #terminal-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    background: var(--bg);
+    padding: 4px;
+  }
+  #terminal-container .xterm {
+    height: 100%;
+  }
+  #terminal-container .xterm .xterm-viewport {
+    background-color: var(--bg) !important;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="statusbar">
+    <span class="dot disconnected" id="status-dot"></span>
+    <span class="label" id="status-label">未连接</span>
+    <span class="wsaddr" id="ws-addr"></span>
+    <span class="credit">FlyGo webcli</span>
+  </div>
+  <div id="terminal-container"></div>
+</div>
+
+<script src="vendor/xterm/xterm.js"></script>
+<script src="vendor/addon-fit/addon-fit.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ---------- 元素 ----------
+  var container = document.getElementById('terminal-container');
+  var statusDot = document.getElementById('status-dot');
+  var statusLabel = document.getElementById('status-label');
+  var wsAddrEl = document.getElementById('ws-addr');
+
+  // ---------- WS 地址: ws(s)://当前host/term, 带 token 则原样拼接 ----------
+  var wsUrl = (function () {
+    var scheme = (location.protocol === 'https:') ? 'wss://' : 'ws://';
+    var url = scheme + location.host + '/term';
+    var token = new URLSearchParams(location.search).get('token');
+    if (token) url += '?token=' + encodeURIComponent(token);
+    return url;
+  })();
+  wsAddrEl.textContent = wsUrl;
+
+  // ---------- 状态 ----------
+  var ws = null;
+  var term = null;
+  var fitAddon = null;
+  var reconnectAttempt = 0;   // 已失败的次数, 决定下次退避延时
+  var reconnectTimer = null;
+  var sessionEnded = false;   // 服务端主动 exit 后不再自动重连
+  var INITIAL_DELAY_MS = 1000;   // 退避起点 1s
+  var MAX_DELAY_MS = 10000;      // 退避上限 10s
+
+  var TERM_OPTS = {
+    cursorBlink: true,
+    fontFamily: 'Consolas, monospace',
+    fontSize: 14,
+    theme: {
+      background: '#0f1115',
+      foreground: '#d6dde9',
+      cursor: '#3b82f6',
+      cursorAccent: '#0f1115',
+      selectionBackground: 'rgba(59, 130, 246, 0.35)',
+      black: '#1e222a',
+      red: '#ef4444',
+      green: '#22c55e',
+      yellow: '#f59e0b',
+      blue: '#3b82f6',
+      magenta: '#c084fc',
+      cyan: '#22d3ee',
+      white: '#d6dde9',
+      brightBlack: '#7a8496',
+      brightRed: '#f87171',
+      brightGreen: '#4ade80',
+      brightYellow: '#fbbf24',
+      brightBlue: '#60a5fa',
+      brightMagenta: '#d8b4fe',
+      brightCyan: '#67e8f9',
+      brightWhite: '#f3f4f6'
+    }
+  };
+
+  // ---------- 状态栏 ----------
+  // 绿=已连接 / 黄=重连中(或首次连接中) / 红=断开
+  function setStatus(state, text) {
+    statusDot.className = 'dot ' + state;
+    statusLabel.textContent = text;
+  }
+
+  // ---------- 发送帧 (协议: JSON 文本帧) ----------
+  function sendFrame(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(obj));
+      return true;
+    }
+    return false;
+  }
+
+  // ---------- 尺寸同步: fit() 后发送 resize 帧 ----------
+  function syncSize() {
+    if (!fitAddon || !term) return;
+    try { fitAddon.fit(); } catch (e) { /* 容器尚未就绪时忽略 */ }
+    if (term.cols > 0 && term.rows > 0) {
+      sendFrame({ type: 'resize', cols: term.cols, rows: term.rows });
+    }
+  }
+
+  // ---------- 新建 Terminal (重连成功后重建 + 清屏) ----------
+  function createTerminal() {
+    if (term) {
+      try { term.dispose(); } catch (e) {}
+      term = null;
+      fitAddon = null;
+      container.innerHTML = '';
+    }
+    term = new Terminal(TERM_OPTS);
+    fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(container);
+    term.clear();
+
+    // 用户输入 -> input 帧
+    term.onData(function (data) {
+      sendFrame({ type: 'input', data: data });
+    });
+
+    syncSize();
+    term.focus();
+  }
+
+  // ---------- 连接 ----------
+  function connect() {
+    if (sessionEnded) return;
+    if (reconnectAttempt === 0) {
+      setStatus('connecting', '连接中…');
+    } else {
+      setStatus('connecting', '重连中… (第 ' + reconnectAttempt + ' 次)');
+    }
+
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (e) {
+      scheduleReconnect();
+      return;
+    }
+
+    ws.onopen = function () {
+      reconnectAttempt = 0;
+      setStatus('connected', '已连接');
+      createTerminal();          // 新建 Terminal 并清屏
+      syncSize();                // 打开后立即同步一次尺寸
+      term.focus();
+    };
+
+    ws.onmessage = function (ev) {
+      // Binary frames carry raw pty bytes (all server output since v0.3.0).
+      // Write the whole blob into the terminal as-is: xterm.js expects each
+      // frame's bytes in a single write, so join before decoding. Text frames
+      // (e.g. {"type":"exit"}) still go through the JSON branch below.
+      if (ev.data instanceof Blob) {
+        ev.data.arrayBuffer().then(function (b) {
+          if (term) term.write(new Uint8Array(b));
+        }).catch(function () {});
+        return;
+      }
+      var msg;
+      try { msg = JSON.parse(ev.data); }
+      catch (e) { return; }      // 非 JSON 帧直接忽略
+      handleServer(msg);
+    };
+
+    ws.onclose = function () {
+      if (!sessionEnded) {
+        setStatus('disconnected', '已断开');
+        scheduleReconnect();
+      }
+    };
+
+    ws.onerror = function () {
+      // onclose 随后触发, 统一走重连
+    };
+  }
+
+  function scheduleReconnect() {
+    if (reconnectTimer) return;
+    var delay = Math.min(INITIAL_DELAY_MS * Math.pow(2, reconnectAttempt), MAX_DELAY_MS);
+    reconnectAttempt++;
+    setStatus('connecting', '重连中… (' + Math.round(delay / 1000) + 's)');
+    reconnectTimer = setTimeout(function () {
+      reconnectTimer = null;
+      connect();
+    }, delay);
+  }
+
+  // ---------- 服务端帧 ----------
+  function handleServer(msg) {
+    switch (msg.type) {
+      case 'output':
+        // {'type':'output','data':'...'}
+        if (typeof msg.data === 'string' && term) term.write(msg.data);
+        break;
+
+      case 'exit':
+        // {'type':'exit','code':N}
+        sessionEnded = true;
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        if (term) {
+          var code = (typeof msg.code === 'number') ? msg.code : '?';
+          term.write('\r\n\x1b[33m--- 进程已退出 (code=' + code + ') ---\x1b[0m\r\n');
+        }
+        setStatus('disconnected', '已退出 (code=' + (typeof msg.code === 'number' ? msg.code : '?') + ')');
+        if (ws) { try { ws.close(); } catch (e) {} }
+        ws = null;
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  // ---------- 窗口尺寸变化 -> fit -> resize 帧 ----------
+  var resizeDebounce = null;
+  window.addEventListener('resize', function () {
+    if (resizeDebounce) clearTimeout(resizeDebounce);
+    resizeDebounce = setTimeout(function () {
+      resizeDebounce = null;
+      syncSize();
+    }, 100);
+  });
+
+  // ---------- 页面卸载时主动关闭, 不触发重连 ----------
+  window.addEventListener('beforeunload', function () {
+    sessionEnded = true;
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if (ws) { try { ws.close(); } catch (e) {} }
+    ws = null;
+  });
+
+  // ---------- 启动 ----------
+  connect();
+})();
+</script>
+</body>
+</html>

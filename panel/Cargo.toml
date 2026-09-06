@@ -1,0 +1,63 @@
+[package]
+name = "flygo"
+version = "0.1.0"
+edition = "2021"
+description = "FlyGo - unified node panel (Rust backend, memory-first)"
+authors = ["FlyGo Developers"]
+
+[[bin]]
+name = "launcher"
+path = "src/bin/launcher.rs"
+
+# 小巧、稳健，减少不必要的依赖
+[profile.release]
+opt-level = "z"      # 体积最小
+lto = true
+codegen-units = 1
+panic = "abort"      # 减小体积
+strip = true
+
+[dependencies]
+axum = { version = "0.7", features = ["ws", "multipart"] }
+# WS 客户端（连本机 webcli 127.0.0.1:8788）；0.24 与 axum 0.7.9 的 ws feature
+# 内部依赖版本一致，cargo 会统一为一个版本，不新增额外 crate。
+tokio-tungstenite = "0.24"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "fs", "signal", "sync", "io-util"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# flygo.toml global configuration parsing (global-config-design.md).
+# Pure Rust, no C/network deps; the only new dependency for P1.
+toml = "0.8"
+sysinfo = "0.30"
+futures = "0.3"
+# ureq 用于本地 Syncthing REST API（http://127.0.0.1:8384）与 control-plane 客户端
+# （MVP 本机 http://127.0.0.1:9001；正式 VPS 可配 https 基址）。
+# tls 走纯 Rust rustls（无 C 编译器依赖，与旧的 ring 无关）。
+ureq = { version = "2", default-features = false, features = ["json", "tls"] }
+# QR rendering for the phone onboarding pairing code (pure Rust, svg output)
+qrcode = { version = "0.14", features = ["svg"] }
+# sha256 verification for /api/fetch component downloads (sha256 pinned in manifest)
+sha2 = "0.10"
+# windows 0.52 raw Win32 API: system tray (Shell_NotifyIconW), popup menu,
+# hidden message window, single-instance mutex, process liveness checks.
+windows = { version = "0.52", features = [
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+  "Win32_System_Threading",
+  "Win32_System_LibraryLoader",
+  "Win32_System_SystemInformation",
+  # Win32_Security: SECURITY_ATTRIBUTES for inheritable handles when spawning a
+  # hidden PowerShell (SMB lifecycle) so we can set STARTUPINFO(SW_HIDE) and
+  # stdout/stderr temp-file redirection, preventing any console window flash.
+  "Win32_Security",
+  "Win32_System_Pipes",
+  "Win32_Storage_FileSystem",
+  "Win32_Graphics_Gdi",
+  # vdisp pinning: QueryDisplayConfig/DisplayConfigGetDeviceInfo (current
+  # display topology + modes); reapply stays on Gdi's ChangeDisplaySettingsExW.
+  "Win32_Devices_Display",
+] }
+velopack = "1.2.0"
+

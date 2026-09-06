@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FlyGo adaptive icon foreground (logo v5 dog head silhouette).
+     Source: flydog-logo.svg. 108dp canvas, viewport kept at 512x512 (original coords).
+     Group transform: scale 0.6, translate (70, 115).
+       head center (310,235) -> canvas center (256,256):
+       translate = 256 - center * 0.6 = (256-186, 256-141) = (70, 115)
+     After transform the head spans roughly x160.6-351.4, y155.8-353.2
+     (~190.8 x 197.4 viewport units), fully inside the 66dp adaptive-icon
+     safe zone (central circle, radius ~156.5 units).
+     Eye / nose tip kept as details in #0A2E6E (same dark blue as the v5 background gradient start). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <group
+        android:scaleX="0.6"
+        android:scaleY="0.6"
+        android:translateX="70"
+        android:translateY="115">
+
+        <!-- dog head silhouette (d copied verbatim from flydog-logo.svg) -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M 469 255 L 427 232 L 383 224 L 334 191 L 288 178 L 267 167 L 237 68 L 199 170 C 170 199 153 242 159 283 L 151 342 C 159 383 183 402 209 394 L 264 348 L 310 332 L 348 310 L 369 291 L 469 255 Z"/>
+
+        <!-- eye (circle cx=321 cy=227 r=8.5, converted to path) -->
+        <path
+            android:fillColor="#0A2E6E"
+            android:pathData="M 321 218.5 A 8.5 8.5 0 1 0 321 235.5 A 8.5 8.5 0 1 0 321 218.5 Z"/>
+
+        <!-- nose tip (ellipse cx=464 cy=247 rx=7 ry=5, converted to path) -->
+        <path
+            android:fillColor="#0A2E6E"
+            android:pathData="M 464 242 A 7 5 0 1 0 464 252 A 7 5 0 1 0 464 242 Z"/>
+
+    </group>
+
+</vector>

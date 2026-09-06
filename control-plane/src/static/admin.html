@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>飞狗控制面 · 管理台</title>
+<script>
+/* Theme boot: run before CSS paint to avoid a flash of the wrong theme.
+   Stored choice wins, otherwise follow the OS preference (default dark). */
+(function () {
+  var t = "dark";
+  try {
+    t = localStorage.getItem("fd_admin_theme")
+      || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+  } catch (e) { /* private mode: keep default */ }
+  document.documentElement.setAttribute("data-theme", t);
+})();
+</script>
+<style>
+/* ============================================================
+   FengDog control-plane admin page (single file, embedded via
+   include_str!). Design tokens follow docs/ui-design-guide.md:
+   cold slate + one accent blue, semantic colors only for status,
+   explicit light/dark sets, no weight above 600, no italics.
+   Scale tokens: font S4 .64 / S3 .68 / S2 .75 / S1 .8 / S0 .9 /
+   T1 1.05 (rem); space .25/.4/.55/.7/1/1.4 (rem); radius 6/8/10 (px).
+   ============================================================ */
+:root, [data-theme="dark"] {
+  --bg:#0f1115; --panel:#15181e; --panel2:#1a1e26; --border:#262c36;
+  --text:#e5e7eb; --muted:#8b93a1; --accent:#4c9aff; --accent-bg:#20314a;
+  --ok:#34d399; --warn:#f59e0b; --err:#ef4444;
+  --dot-gray:#565d6a;                     /* offline / unknown dot */
+  --shadow-sm:0 1px 2px rgba(0,0,0,.3);
+  --on-accent:#fff;                       /* text on accent / danger fills */
+}
+[data-theme="light"] {
+  --bg:#f3f5f8; --panel:#ffffff; --panel2:#f0f2f6; --border:#dbe0ea;
+  --text:#1a2433; --muted:#5b6b80; --accent:#2563eb; --accent-bg:#e3ecfb;
+  --ok:#059669; --warn:#d97706; --err:#dc2626;
+  --dot-gray:#9aa3b2;
+  --shadow-sm:0 1px 2px rgba(15,23,42,.08);
+  --on-accent:#fff;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Microsoft YaHei", "PingFang SC", "Noto Sans SC",
+    "Helvetica Neue", Roboto, Arial, sans-serif;
+  font-size: .8rem; margin: 0; padding: 1rem;
+  background: var(--bg); color: var(--text);
+}
+.wrap { max-width: 1280px; margin: 0 auto; }  /* structural: readable table width */
+
+/* Header */
+.top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: .7rem; }
+.h1 { font-size: 1.05rem; font-weight: 600; }
+.sub { font-size: .68rem; color: var(--muted); }
+.topbtns { display: flex; gap: .4rem; }
+
+/* Panels */
+.panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: var(--shadow-sm);
+  padding: .7rem; margin-bottom: .7rem;
+}
+.phead { font-size: .8rem; font-weight: 600; margin-bottom: .55rem; }
+.phead .sub { font-weight: 400; margin-left: .4rem; }
+.hint { font-size: .68rem; color: var(--muted); margin: 0 0 .55rem; }
+
+/* Buttons (guide 6.1: accent for primary, panel2 for secondary,
+   red only for destructive actions) */
+.btn {
+  font-size: .8rem; font-weight: 500; font-family: inherit;
+  padding: .28rem .6rem; border-radius: 6px; cursor: pointer;
+  border: 1px solid transparent; transition: background .15s, border-color .15s;
+}
+.btn.on { background: var(--accent); color: var(--on-accent); }
+.btn.on:hover { filter: brightness(1.1); }
+.btn.off { background: var(--panel2); color: var(--muted); border-color: var(--border); }
+.btn.off:hover { color: var(--text); border-color: var(--accent); }
+.btn.danger { background: var(--err); color: var(--on-accent); }
+.btn.danger:hover { filter: brightness(1.1); }
+
+/* Forms */
+.tinput {
+  font-size: .8rem; font-family: inherit; color: var(--text);
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 6px; padding: .28rem .55rem; outline: none;
+}
+.tinput:focus { border-color: var(--accent); }
+#adminToken { width: 320px; }
+#search { width: 280px; }
+.rowline { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+.toolbar { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; margin-bottom: .55rem; }
+
+/* Messages */
+.err { font-size: .75rem; color: var(--err); min-height: 1rem; margin-top: .4rem; }
+.okmsg { font-size: .75rem; color: var(--ok); }
+
+/* Tables */
+.twrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .8rem; }
+th {
+  font-size: .68rem; font-weight: 500; color: var(--muted);
+  text-align: left; padding: .4rem .55rem;
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+td { padding: .4rem .55rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td.hw { font-size: .68rem; color: var(--muted); padding-top: 0; }
+.loadrow { text-align: center; color: var(--muted); padding: .7rem; font-size: .75rem; }
+.loadrow.e { color: var(--err); }
+
+/* Offline device rows: neutral gray, not an error color (guide 3.2) */
+tr.off td { color: var(--muted); }
+tr.off td.hw { color: var(--muted); }
+
+/* Status dots (guide 6.3: one dot implementation, always with a label) */
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: .25rem; }
+.dot.on { background: var(--ok); }
+.dot.off { background: var(--dot-gray); }
+.dot.revoked { background: var(--err); }
+
+/* Subscription states: semantic colors for status text only */
+.st-pending { color: var(--dot-gray); }
+.st-trial { color: var(--accent); }
+.st-active { color: var(--ok); }
+.st-expiring { color: var(--warn); }
+.st-expired { color: var(--err); }
+.st-cancelled { color: var(--muted); }
+.st-used { color: var(--muted); }
+code.codechip { font-family: Consolas, Menlo, monospace; font-size: .75rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="h1">飞狗控制面 · 管理台</div>
+      <div class="sub">设备订阅与激活码运营工具 · 设备列表每 15 秒自动刷新</div>
+    </div>
+    <div class="topbtns">
+      <button class="btn off" id="themeBtn" onclick="toggleTheme()">浅色</button>
+      <button class="btn off" id="logoutBtn" style="display:none" onclick="logout()">退出</button>
+    </div>
+  </header>
+
+  <section class="panel" id="loginBox" style="display:none">
+    <div class="phead">登录</div>
+    <p class="hint">输入管理口令（来自服务端环境变量 FENGDOG_ADMIN_TOKEN），换取 12 小时会话令牌。登录限速：每分钟 5 次。</p>
+    <div class="rowline">
+      <input type="password" id="adminToken" class="tinput" placeholder="管理口令"
+             onkeydown="if(event.key==='Enter'){doLogin();}">
+      <button class="btn on" onclick="doLogin()">登录</button>
+    </div>
+    <div class="err" id="loginMsg"></div>
+  </section>
+
+  <main id="mainBox" style="display:none">
+    <section class="panel">
+      <div class="phead">设备 <span class="sub">15 分钟内有心跳视为在线 · 离线行显示为灰色</span></div>
+      <div class="toolbar">
+        <input id="search" class="tinput" placeholder="搜索名称 / 硬件指纹 / 激活码 / 状态" oninput="renderDevices()">
+        <button class="btn off" onclick="loadDevices()">刷新</button>
+        <span class="sub" id="devMeta"></span>
+      </div>
+      <div class="twrap">
+      <table>
+        <thead><tr>
+          <th>名称</th><th>类型</th><th>订阅状态</th><th>到期时间</th><th>最近心跳</th>
+          <th>在线</th><th>剩余磁盘</th><th>版本</th><th>注册码</th><th>操作</th>
+        </tr></thead>
+        <tbody id="devRows"></tbody>
+      </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="phead">激活码 <span class="sub">pro = 1 年正式版 · trial = 30 天试用 · 每码限激活一台已注册设备</span></div>
+      <div class="toolbar">
+        <select id="codeKind" class="tinput">
+          <option value="trial">trial · 30 天试用</option>
+          <option value="pro">pro · 1 年正式</option>
+        </select>
+        <button class="btn on" onclick="issueCode()">签发</button>
+        <span class="sub" id="codeMsg"></span>
+      </div>
+      <div class="twrap">
+      <table>
+        <thead><tr>
+          <th>激活码</th><th>类型</th><th>状态</th><th>签发时间</th><th>使用时间</th><th>操作</th>
+        </tr></thead>
+        <tbody id="codeRows"></tbody>
+      </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+"use strict";
+/* Admin page logic: vanilla ES5, no dependencies, same-origin API calls. */
+
+var TOKEN_KEY = "fd_admin_jwt";
+var THEME_KEY = "fd_admin_theme";
+var AUTO_REFRESH_MS = 15000;
+
+var CURRENT = [];        /* devices from /api/admin/devices */
+var CURRENT_CODES = [];  /* codes from /api/admin/codes */
+
+var KIND_LABEL = { computer: "电脑", phone: "手机", drive: "硬盘" };
+var STATE_LABEL = { pending: "待激活", trial: "试用中", active: "有效",
+                    expiring: "即将到期", expired: "已过期", cancelled: "已取消" };
+var CODE_KIND_LABEL = { trial: "试用 30 天", pro: "正式 1 年" };
+var CODE_STATUS_LABEL = { issued: "未使用", used: "已使用", revoked: "已作废" };
+
+function tok() { try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; } }
+
+/* Generic JSON call; never throws - failures come back as {ok:false}. */
+function api(path, method, body, token) {
+  var opts = { method: method || "GET", headers: {} };
+  if (body) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+  if (token) { opts.headers["Authorization"] = "Bearer " + token; }
+  return fetch(path, opts).then(function (r) {
+    return r.json().then(function (j) { j._status = r.status; return j; })
+      .catch(function () { return { ok: false, message: "响应不是 JSON（服务异常）", _status: r.status }; });
+  }).catch(function () {
+    return { ok: false, message: "网络错误（控制面服务未启动或不可达）", _status: 0 };
+  });
+}
+
+/* ---------- formatters ---------- */
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+function fmtTime(sec) {
+  if (sec == null) return "-";
+  return new Date(sec * 1000).toLocaleString();
+}
+function fmtRel(sec) {
+  if (sec == null) return "从未心跳";
+  var d = Math.max(0, Math.floor(Date.now() / 1000 - sec));
+  if (d < 60) return d + " 秒前";
+  if (d < 3600) return Math.floor(d / 60) + " 分钟前";
+  if (d < 86400) return Math.floor(d / 3600) + " 小时前";
+  return Math.floor(d / 86400) + " 天前";
+}
+function fmtBytes(b) {
+  if (b == null) return "-";
+  var g = b / 1073741824;
+  if (g >= 1024) return (g / 1024).toFixed(2) + " TiB";
+  return g.toFixed(1) + " GiB";
+}
+
+/* ---------- theme ---------- */
+
+function applyTheme(tm) {
+  document.documentElement.setAttribute("data-theme", tm);
+  var b = document.getElementById("themeBtn");
+  if (b) b.textContent = (tm === "light") ? "深色" : "浅色";
+}
+function toggleTheme() {
+  var cur = document.documentElement.getAttribute("data-theme") || "dark";
+  var next = (cur === "light") ? "dark" : "light";
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* ignore */ }
+  applyTheme(next);
+}
+
+/* ---------- session ---------- */
+
+function showLogin(msg) {
+  document.getElementById("mainBox").style.display = "none";
+  document.getElementById("loginBox").style.display = "block";
+  document.getElementById("logoutBtn").style.display = "none";
+  document.getElementById("loginMsg").textContent = msg || "";
+}
+function showMain() {
+  document.getElementById("loginBox").style.display = "none";
+  document.getElementById("mainBox").style.display = "block";
+  document.getElementById("logoutBtn").style.display = "";
+  loadDevices();
+  loadCodes();
+}
+function doLogin() {
+  var t = document.getElementById("adminToken").value.trim();
+  if (!t) { document.getElementById("loginMsg").textContent = "请输入管理口令。"; return; }
+  api("/api/admin/login", "POST", { token: t }).then(function (j) {
+    if (j.ok) {
+      try { localStorage.setItem(TOKEN_KEY, j.token); } catch (e) { /* ignore */ }
+      showMain();
+    } else if (j._status === 503) {
+      document.getElementById("loginMsg").textContent =
+        "管理端未启用：服务端未设置 FENGDOG_ADMIN_TOKEN（见部署文档），登录不可用。";
+    } else {
+      document.getElementById("loginMsg").textContent =
+        "登录失败：" + (j.message || "口令错误") + "。连续 5 次失败后需等待 1 分钟。";
+    }
+  });
+}
+function logout() {
+  try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+  CURRENT = []; CURRENT_CODES = [];
+  showLogin();
+}
+/* Shared 401 handling for admin data calls. */
+function authFail(j) {
+  if (j._status === 401) { showLogin("会话已过期或无效，请重新登录。"); return true; }
+  return false;
+}
+
+/* ---------- clipboard ---------- */
+
+function copyText(text, metaId) {
+  var done = function () {
+    flash(metaId, "已复制 " + text);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text, done); });
+  } else { fallbackCopy(text, done); }
+}
+function fallbackCopy(text, done) {
+  var ta = document.createElement("textarea");
+  ta.value = text; document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); done(); } catch (e) { /* ignore */ }
+  document.body.removeChild(ta);
+}
+var FLASH_TIMERS = {};
+function flash(id, text) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  if (FLASH_TIMERS[id]) clearTimeout(FLASH_TIMERS[id]);
+  FLASH_TIMERS[id] = setTimeout(function () { el.textContent = ""; }, 2500);
+}
+
+/* ---------- devices panel ---------- */
+
+function loadDevices() {
+  document.getElementById("devRows").innerHTML =
+    '<tr><td colspan="10" class="loadrow">加载中（本地接口，通常 1 秒内完成）…</td></tr>';
+  api("/api/admin/devices", "GET", null, tok()).then(function (j) {
+    if (authFail(j)) return;
+    if (!j.ok) {
+      document.getElementById("devRows").innerHTML =
+        '<tr><td colspan="10" class="loadrow e">加载失败：' + esc(j.message) +
+        '。点上方「刷新」重试；持续失败时检查控制面服务是否运行。</td></tr>';
+      return;
+    }
+    CURRENT = j.devices || [];
+    renderDevices();
+  });
+}
+
+function renderDevices() {
+  var q = (document.getElementById("search").value || "").trim().toLowerCase();
+  var shown = CURRENT.filter(function (d) {
+    if (!q) return true;
+    var hay = [d.name, d.hardware_id, d.activation_code, d.node_kind,
+               d.subscription_state, d.version].join(" ").toLowerCase();
+    return hay.indexOf(q) >= 0;
+  });
+  if (CURRENT.length === 0) {
+    document.getElementById("devRows").innerHTML =
+      '<tr><td colspan="10" class="loadrow">暂无设备。节点安装后调用 /api/register 注册，即可在此出现。</td></tr>';
+  } else if (shown.length === 0) {
+    document.getElementById("devRows").innerHTML =
+      '<tr><td colspan="10" class="loadrow">没有匹配「' + esc(q) + '」的设备。清空搜索框可查看全部。</td></tr>';
+  } else {
+    var html = "";
+    shown.forEach(function (d) {
+      var code = d.activation_code || "-";
+      html += '<tr class="' + (d.online ? "" : "off") + '">'
+        + "<td>" + esc(d.name) + '<div class="hw" title="' + esc(d.hardware_id) + '">'
+        + esc(String(d.hardware_id).substring(0, 20)) + "</div></td>"
+        + "<td>" + esc(KIND_LABEL[d.node_kind] || d.node_kind) + "</td>"
+        + '<td class="st-' + esc(d.subscription_state) + '">'
+        + esc(STATE_LABEL[d.subscription_state] || d.subscription_state) + "</td>"
+        + "<td>" + fmtTime(d.expires_at) + "</td>"
+        + '<td title="' + fmtTime(d.last_heartbeat_at) + '">' + fmtRel(d.last_heartbeat_at) + "</td>"
+        + '<td><span class="dot ' + (d.online ? "on" : "off") + '"></span>'
+        + (d.online ? "在线" : "离线") + "</td>"
+        + "<td>" + fmtBytes(d.disk_free_bytes) + "</td>"
+        + "<td>" + esc(d.version || "-") + "</td>"
+        + "<td><code class=\"codechip\">" + esc(code) + "</code>"
+        + (d.activation_code ? ' <button class="btn off" onclick="copyText(\'' + esc(code) + '\',\'devMeta\')">复制</button>' : "")
+        + "</td>"
+        + '<td><button class="btn off" onclick="renewById(' + d.device_id + ')">续期 365 天</button> '
+        + '<button class="btn danger" onclick="cancelById(' + d.device_id + ')">取消订阅</button></td>'
+        + "</tr>";
+    });
+    document.getElementById("devRows").innerHTML = html;
+  }
+  document.getElementById("devMeta").textContent =
+    "更新于 " + new Date().toLocaleTimeString() + " · 匹配 " + shown.length + " / 共 " + CURRENT.length + " 台";
+}
+
+function renewById(id) {
+  var d = CURRENT.filter(function (x) { return x.device_id === id; })[0];
+  if (!d) return;
+  if (!confirm("为「" + d.name + "」续期 365 天？套餐改为 active，配额 1 TiB，到期时间在当前基础上顺延。")) return;
+  api("/api/renew", "POST", { hardware_id: d.hardware_id, days: 365 }, tok()).then(function (j) {
+    if (authFail(j)) return;
+    if (!j.ok) { flash("devMeta", "续期失败：" + (j.message || "未知错误")); return; }
+    loadDevices();
+  });
+}
+function cancelById(id) {
+  var d = CURRENT.filter(function (x) { return x.device_id === id; })[0];
+  if (!d) return;
+  if (!confirm("确认取消「" + d.name + "」的订阅？到期时间立即改为当前时刻，互备等在线服务会停止（本地数据与本地功能不受影响）。此操作不可逆。")) return;
+  api("/api/cancel", "POST", { hardware_id: d.hardware_id }, tok()).then(function (j) {
+    if (authFail(j)) return;
+    if (!j.ok) { flash("devMeta", "取消失败：" + (j.message || "未知错误")); return; }
+    loadDevices();
+  });
+}
+
+/* ---------- activation codes panel ---------- */
+
+function loadCodes() {
+  document.getElementById("codeRows").innerHTML =
+    '<tr><td colspan="6" class="loadrow">加载中（本地接口，通常 1 秒内完成）…</td></tr>';
+  api("/api/admin/codes", "GET", null, tok()).then(function (j) {
+    if (authFail(j)) return;
+    if (!j.ok) {
+      document.getElementById("codeRows").innerHTML =
+        '<tr><td colspan="6" class="loadrow e">加载失败：' + esc(j.message) +
+        "。签发与作废在服务端完成，重试前不影响已有激活码。</td></tr>";
+      return;
+    }
+    CURRENT_CODES = j.codes || [];
+    renderCodes();
+  });
+}
+
+function renderCodes() {
+  if (CURRENT_CODES.length === 0) {
+    document.getElementById("codeRows").innerHTML =
+      '<tr><td colspan="6" class="loadrow">暂无激活码。选择类型后点「签发」生成第一个，再复制发给用户。</td></tr>';
+    return;
+  }
+  var html = "";
+  CURRENT_CODES.forEach(function (c, i) {
+    var dotCls = c.status === "issued" ? "on" : (c.status === "revoked" ? "revoked" : "off");
+    html += "<tr>"
+      + "<td><code class=\"codechip\">" + esc(c.code) + "</code></td>"
+      + "<td>" + esc(CODE_KIND_LABEL[c.kind] || c.kind) + "</td>"
+      + '<td><span class="dot ' + dotCls + '"></span>'
+      + '<span class="st-' + esc(c.status) + '">' + esc(CODE_STATUS_LABEL[c.status] || c.status) + "</span></td>"
+      + "<td>" + fmtTime(c.created_at) + "</td>"
+      + "<td>" + fmtTime(c.used_at) + "</td>"
+      + '<td><button class="btn off" onclick="copyText(\'' + esc(c.code) + '\',\'codeMsg\')">复制</button>'
+      + (c.status === "issued"
+          ? ' <button class="btn danger" onclick="revokeCode(' + i + ')">作废</button>'
+          : "")
+      + "</td></tr>";
+  });
+  document.getElementById("codeRows").innerHTML = html;
+}
+
+function issueCode() {
+  var kind = document.getElementById("codeKind").value;
+  api("/api/admin/codes", "POST", { kind: kind }, tok()).then(function (j) {
+    if (authFail(j)) return;
+    if (!j.ok) { flash("codeMsg", "签发失败：" + (j.message || "未知错误")); return; }
+    flash("codeMsg", "已签发 " + j.code.code + "（" + (CODE_KIND_LABEL[j.code.kind] || j.code.kind) + "），点「复制」发给用户");
+    loadCodes();
+  });
+}
+function revokeCode(i) {
+  var c = CURRENT_CODES[i];
+  if (!c) return;
+  if (!confirm("作废激活码 " + c.code + "？作废后该码无法再激活任何设备，已激活的设备不受影响。")) return;
+  api("/api/admin/codes/revoke", "POST", { code: c.code }, tok()).then(function (j) {
+    if (authFail(j)) return;
+    if (!j.ok) { flash("codeMsg", "作废失败：" + (j.message || "未知错误")); return; }
+    loadCodes();
+  });
+}
+
+/* ---------- boot ---------- */
+
+applyTheme(document.documentElement.getAttribute("data-theme") || "dark");
+if (tok()) { showMain(); } else { showLogin(); }
+/* Auto-refresh devices only; codes change solely through admin actions. */
+setInterval(function () {
+  if (document.hidden) return;
+  if (document.getElementById("mainBox").style.display === "block") loadDevices();
+}, AUTO_REFRESH_MS);
+</script>
+</body>
+</html>

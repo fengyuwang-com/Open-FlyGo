@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FlyGo adaptive icon background: solid #1A73E8 (v5 gradient end color).
+     Simpler alternative (recommended): no drawable at all, use
+     android:background="#1A73E8" in the AdaptiveIconDrawable definition. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#1A73E8"
+        android:pathData="M0,0 h108 v108 h-108 Z"/>
+</vector>
