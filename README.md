@@ -87,7 +87,7 @@ RUSTFLAGS="--remap-path-prefix=$PWD=C:\\src" cargo build --release
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | 架构总纲：项目是什么、四层架构、产品哲学 |
 | [`DESIGN.md`](DESIGN.md) | UI 设计宪法（配色 / 结构细节 / 文案清单） |
-| [`商业计划书.md`](商业计划书.md) | 商业模式与产品矩阵（AGPL 开源 + 服务订阅） |
+| `商业计划书.md` | 商业模式与产品矩阵（AGPL 开源 + 服务订阅） |
 | [`docs/architecture-diagrams.md`](docs/architecture-diagrams.md) | Mermaid 架构图（7 张） |
 | [`docs/project-structure.md`](docs/project-structure.md) | 每个文件写在哪里、为什么在那里 |
 | [`docs/产品哲学与工程原则.md`](docs/产品哲学与工程原则.md) | 产品哲学全文 |
