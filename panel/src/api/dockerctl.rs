@@ -29,7 +29,7 @@ use std::time::{Duration, Instant};
 /// CREATE_NO_WINDOW: cmd.exe / tasklist.exe / taskkill.exe are console apps;
 /// spawned from a GUI parent they flash a black window unless this flag is set.
 /// docker-ctl.cmd's wsl.exe children inherit this hidden console.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::winproc::CREATE_NO_WINDOW;
 
 /// 开关动作的串行锁：避免多个按钮同时点导致 wsl 命令并发打架。
 pub static LOCK: Mutex<()> = Mutex::new(());

@@ -24,7 +24,7 @@ use crate::ApiResult;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Serialize;
-use std::os::windows::process::CommandExt;
+use crate::winproc::hidden_command;
 use std::time::Duration;
 
 /// Embedded six-step page (same single-file include pattern as index.html).
@@ -135,12 +135,11 @@ fn config_device_id() -> Option<String> {
 /// Best-effort tailnet IPv4 (`tailscale ip -4`, first line). None when
 /// Tailscale is not installed / not running / not on PATH.
 fn tailnet_ip() -> Option<String> {
-    let out = std::process::Command::new("tailscale")
+    let out = hidden_command("tailscale")
         .args(["ip", "-4"])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
-        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
         .output()
         .ok()?;
     if !out.status.success() {
@@ -243,7 +242,7 @@ pub async fn verify() -> ApiResult<Json<VerifyPayload>> {
         // Connections: remote devices, last activity, inbound bytes.
         let conns = rest_get_json(&key, "/rest/system/connections")
             .and_then(|v| v.get("connections").and_then(|c| c.as_object()).cloned());
-        let (mut paired, mut connected, mut last_at, mut in_bytes, conns_ok) = match &conns {
+        let (paired, connected, last_at, in_bytes, conns_ok) = match &conns {
             Some(map) => {
                 let (mut p, mut c, mut at, mut b) = (0usize, 0usize, None::<i64>, 0u64);
                 for (id, info) in map {

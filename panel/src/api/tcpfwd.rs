@@ -13,18 +13,18 @@
 //   - 旧 portproxy 规则保留不动，作同网段直连兜底（NAT，不占端口，无冲突）。
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
-use std::os::windows::process::CommandExt;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
+use crate::winproc::hidden_command;
 use tokio::net::{TcpListener, TcpStream};
 
 /// 调和间隔：IP 变化（DHCP / tailnet 重连）与端口占用恢复都靠下一轮自愈。
 const RECONCILE_SECS: u64 = 30;
 
 /// 运行中的监听任务：(listen_ip, port) -> JoinHandle。
-static REG: OnceLock<Mutex<HashMap<(String, u16), tokio::task::JoinHandle<()>>>> =
-    OnceLock::new();
+type FwdMap = HashMap<(String, u16), tokio::task::JoinHandle<()>>;
+static REG: OnceLock<Mutex<FwdMap>> = OnceLock::new();
 
 fn reg() -> &'static Mutex<HashMap<(String, u16), tokio::task::JoinHandle<()>>> {
     REG.get_or_init(|| Mutex::new(HashMap::new()))
@@ -75,13 +75,12 @@ fn listen_ips() -> Vec<String> {
 /// 跳过回环/链路本地；100.x 的 tailnet 段由 tailnet_ip() 专管，此处照收，
 /// 去重后无害）。
 fn ipconfig_ipv4s() -> Vec<String> {
-    let out = std::process::Command::new("ipconfig")
+    let out = hidden_command("ipconfig")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
-        .creation_flags(0x0800_0000)
         .output();
-    let mut ips = Vec::new();
+    let ips = Vec::new();
     let Ok(out) = out else { return ips };
     parse_ipconfig_ipv4s(&String::from_utf8_lossy(&out.stdout))
 }
@@ -129,12 +128,11 @@ fn desired_listeners_for(ports: &[u16], ips: &[String]) -> Vec<(String, u16)> {
 /// CREATE_NO_WINDOW：面板是 GUI 进程，子进程不带此标志会闪黑窗口。
 fn evict_serve(port: u16) {
     for mode in ["--https", "--http"] {
-        let _ = std::process::Command::new("tailscale")
+        let _ = hidden_command("tailscale")
             .args(["serve", &format!("{mode}={port}"), "off"])
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .creation_flags(0x0800_0000)
             .status();
     }
 }

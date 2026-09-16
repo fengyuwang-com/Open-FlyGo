@@ -482,14 +482,13 @@ fn status_blocking() -> Value {
                     if let Some(peer) =
                         v.get("accepter_syncthing_id").and_then(|c| c.as_str()).map(|s| s.to_string())
                     {
-                        if !peer.is_empty() {
-                            if add_peer_device(&peer).is_ok() {
+                        if !peer.is_empty()
+                            && add_peer_device(&peer).is_ok() {
                                 st.peer_syncthing_id = Some(peer);
                                 st.paired_at = Some(now());
                                 st.invite = None;
                                 let _ = save_state(&st);
                             }
-                        }
                     }
                 }
             }

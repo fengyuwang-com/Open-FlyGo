@@ -113,31 +113,8 @@ fn compose_services() -> Vec<(String, String)> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests (pure parsing; no filesystem, no docker)
-// ---------------------------------------------------------------------------
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn starter_compose_parses_with_expected_services() {
-        let svcs = parse_services(STARTER_COMPOSE);
-        let keys: Vec<&str> = svcs.iter().map(|(k, _)| k.as_str()).collect();
-        assert_eq!(keys, vec!["alist", "jellyfin"], "active services only; immich stays commented out");
-        let alist = svcs.iter().find(|(k, _)| k == "alist").unwrap();
-        assert_eq!(alist.1, "alist");
-    }
-
-    #[test]
-    fn parse_handles_container_name_and_top_level_keys() {
-        let yml = "services:\n  immich-server:\n    container_name: immich_server\nvolumes:\n  x:\n";
-        let svcs = parse_services(yml);
-        assert_eq!(svcs.len(), 1);
-        assert_eq!(svcs[0], ("immich-server".to_string(), "immich_server".to_string()));
-    }
-}
 
 /// 尽力从 compose 里该服务的定义提取端口（无则 0）
 fn service_port(name: &str) -> u16 {
@@ -312,4 +289,30 @@ pub fn running_containers() -> std::collections::HashSet<String> {
         }
     }
     set
+}
+
+// ---------------------------------------------------------------------------
+// Tests (pure parsing; no filesystem, no docker)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn starter_compose_parses_with_expected_services() {
+        let svcs = parse_services(STARTER_COMPOSE);
+        let keys: Vec<&str> = svcs.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, vec!["alist", "jellyfin"], "active services only; immich stays commented out");
+        let alist = svcs.iter().find(|(k, _)| k == "alist").unwrap();
+        assert_eq!(alist.1, "alist");
+    }
+
+    #[test]
+    fn parse_handles_container_name_and_top_level_keys() {
+        let yml = "services:\n  immich-server:\n    container_name: immich_server\nvolumes:\n  x:\n";
+        let svcs = parse_services(yml);
+        assert_eq!(svcs.len(), 1);
+        assert_eq!(svcs[0], ("immich-server".to_string(), "immich_server".to_string()));
+    }
 }

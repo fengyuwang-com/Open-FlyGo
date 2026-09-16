@@ -83,6 +83,9 @@ pub struct Config {
     pub native_policy_path: PathBuf,
     /// Operation log directory (<root>/data/logs); log.rs writes flygo.log
     /// here. Derived straight from the install root (CEO-pinned path).
+    /// Kept as part of the frozen path contract even though log.rs currently
+    /// derives the directory itself.
+    #[allow(dead_code)]
     pub logs_dir: PathBuf,
 }
 

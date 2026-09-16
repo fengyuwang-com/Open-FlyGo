@@ -19,16 +19,16 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DispatchMessageW,
-    GetCursorPos, GetMessageW, HICON, HMENU, HWND_MESSAGE, IMAGE_ICON, LoadImageW, LR_LOADFROMFILE,
+    GetCursorPos, GetMessageW, HICON, HMENU, IMAGE_ICON, LoadImageW, LR_LOADFROMFILE,
     MENU_ITEM_FLAGS, MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG, PostMessageW, PostQuitMessage,
     RegisterClassW, SetForegroundWindow, SW_HIDE, TPM_RETURNCMD, TPM_RIGHTBUTTON,
-    TrackPopupMenu, TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE, WNDCLASSW, WM_APP,
+    TrackPopupMenu, TranslateMessage, WINDOW_STYLE, WNDCLASSW, WM_APP,
     WM_COMMAND, WM_DESTROY, WM_ENDSESSION, WM_LBUTTONUP, WM_NULL, WM_QUERYENDSESSION,
     WM_RBUTTONUP, WS_EX_TOOLWINDOW,
 };
 
 use crate::daemon::DaemonState;
-use crate::log::{log_error, log_warn};
+use crate::log::log_error;
 
 /// Custom icon callback message (WM_APP + 1).
 const TRAY_CALLBACK_MSG: u32 = WM_APP + 1;
@@ -252,10 +252,12 @@ unsafe fn build_nid(hwnd: HWND, hicon: HICON) -> NOTIFYICONDATAW {
 }
 
 unsafe fn remove_icon(hwnd: HWND) {
-    let mut nid = NOTIFYICONDATAW::default();
-    nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
-    nid.hWnd = hwnd;
-    nid.uID = TRAY_ICON_ID;
+    let nid = NOTIFYICONDATAW {
+        cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
+        hWnd: hwnd,
+        uID: TRAY_ICON_ID,
+        ..Default::default()
+    };
     Shell_NotifyIconW(NIM_DELETE, &nid);
 }
 
@@ -478,9 +480,6 @@ fn wstr(s: &str) -> Vec<u16> {
 fn copy_wide(dst: &mut [u16], s: &str) {
     let mut it = s.encode_utf16();
     for slot in dst.iter_mut() {
-        *slot = match it.next() {
-            Some(u) => u,
-            None => 0,
-        };
+        *slot = it.next().unwrap_or(0);
     }
 }

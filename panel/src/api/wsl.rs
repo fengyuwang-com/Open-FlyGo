@@ -30,7 +30,7 @@ use windows::Win32::System::SystemInformation::GetLocalTime;
 
 /// CREATE_NO_WINDOW: console children spawned from a GUI parent flash a
 /// black window unless this flag is set.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::winproc::CREATE_NO_WINDOW;
 /// Managed WSL distro (dockerd is systemd-managed inside it).
 /// pub(crate): dockerctl.rs / dockernet.rs / daemon.rs run commands in the
 /// same distro. Never hardcode the name at call sites; always go through
@@ -72,7 +72,7 @@ fn decode_utf16le(raw: &[u8]) -> String {
 /// Heuristic: ASCII-range UTF-16LE text has a zero high byte in most pairs.
 /// (Checked against real `wsl -l -q` output, which carries no BOM.)
 fn looks_like_utf16le(raw: &[u8]) -> bool {
-    if raw.len() < 4 || raw.len() % 2 != 0 {
+    if raw.len() < 4 || !raw.len().is_multiple_of(2) {
         return false;
     }
     let mut total = 0usize;
@@ -446,14 +446,22 @@ static KEEPALIVE_STOP: AtomicBool = AtomicBool::new(false);
 /// can break the loop promptly - a bare `loop {}` here would keep the process
 /// running as a zombie even after `[FlyGo] bye`.
 pub fn keepalive_loop() {
-    KEEPALIVE_STOP.store(false, Ordering::Relaxed);
-    KEEPALIVE_ACTIVE.store(true, Ordering::Relaxed);
+    // P0-1: never reset the stop flag when a shutdown was already requested.
+    // The tail of main sets KEEPALIVE_STOP via on_panel_exit(); a late boot
+    // task racing the shutdown tail could otherwise spawn this thread after
+    // that and clear the flag, resurrecting the poller while the process is
+    // trying to exit.
+    if KEEPALIVE_STOP.load(Ordering::Acquire) || crate::shutdown_requested() {
+        return;
+    }
+    KEEPALIVE_ACTIVE.store(true, Ordering::Release);
     eprintln!("[wsl-keepalive] thread started (poll every {KEEPALIVE_POLL_SECS}s)");
     keepalive_tick();
     loop {
         for _ in 0..KEEPALIVE_POLL_SECS {
-            if KEEPALIVE_STOP.load(Ordering::Relaxed) {
+            if KEEPALIVE_STOP.load(Ordering::Acquire) || crate::shutdown_requested() {
                 eprintln!("[wsl-keepalive] stop flag set; thread exiting");
+                KEEPALIVE_ACTIVE.store(false, Ordering::Release);
                 return;
             }
             std::thread::sleep(Duration::from_secs(1));
@@ -475,8 +483,8 @@ pub fn on_panel_exit() {
     // Tell the keepalive thread to stop polling so it can drain and let the
     // process exit (it is a detached std thread that would otherwise pin the
     // process alive forever).
-    KEEPALIVE_STOP.store(true, Ordering::Relaxed);
-    KEEPALIVE_ACTIVE.store(false, Ordering::Relaxed);
+    KEEPALIVE_STOP.store(true, Ordering::Release);
+    KEEPALIVE_ACTIVE.store(false, Ordering::Release);
     let killed = kill_keepalive_sessions();
     eprintln!("[wsl-keepalive] panel exit: dropped {killed} keepalive session(s)");
     if !target_on() {
@@ -505,7 +513,8 @@ fn run_selfcheck() {
         summary_ok: false,
         steps: Vec::new(),
     };
-    let steps: [(&str, &str, fn() -> (bool, String)); 7] = [
+    type Step = (&'static str, &'static str, fn() -> (bool, String));
+    let steps: [Step; 7] = [
         ("tailscale", "Tailscale service", step_tailscale),
         ("portproxy", "portproxy rules", step_portproxy),
         ("tcpforward", "TCP forwarders", step_tcpforward),

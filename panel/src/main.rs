@@ -71,6 +71,7 @@ mod log;
 mod settings;
 mod smb;
 mod tray;
+mod winproc;
 
 use axum::{
     middleware::{self, Next},
@@ -79,15 +80,12 @@ use axum::{
     Router,
 };
 use std::net::SocketAddr;
-use std::os::windows::process::CommandExt;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 /// Application shared state (paths + tray daemon).
 #[derive(Clone)]
 struct AppState {
-    mirror_log: String,
-    mirror_src: String,
-    mirror_dst: String,
     daemon: Arc<daemon::DaemonState>,
 }
 
@@ -97,12 +95,61 @@ static SHUTDOWN_TX: std::sync::OnceLock<tokio::sync::watch::Sender<bool>> =
 static SHUTDOWN_RX: std::sync::Mutex<Option<tokio::sync::watch::Receiver<bool>>> =
     std::sync::Mutex::new(None);
 
+// P0-1 process-exit root cure. Every graceful-shutdown step appends its name
+// here as it completes; if the process still has to take the forced-exit
+// fallback, the structured log lists done vs missing steps.
+static SHUTDOWN_STEPS: std::sync::Mutex<Vec<&'static str>> = std::sync::Mutex::new(Vec::new());
+
+/// Set by request_shutdown / the shutdown tail. Blocking helper threads and
+/// late starters (tray cmd runner, keepalive thread, boot task) poll this to
+/// stand down instead of spawning new work during exit.
+pub static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+
+/// Ordered checklist of the graceful-shutdown steps performed at the tail of
+/// main. A process exit is "complete" when all of them are recorded.
+const SHUTDOWN_STEP_ALL: [&str; 6] =
+    ["children", "smb", "wsl-keepalive", "bg-tasks", "instance-mutex", "tray"];
+
+/// True when the full graceful tail ran to completion, so main() can return
+/// and let the process exit naturally (no process::exit() needed).
+static GRACEFUL_COMPLETE: AtomicBool = AtomicBool::new(false);
+
+fn record_shutdown_step(step: &'static str) {
+    SHUTDOWN_STEPS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(step);
+}
+
+/// Build the done/missing checklist line for the forced-exit fallback log.
+/// Pure function (unit-tested).
+fn shutdown_report(done: &[&str]) -> String {
+    let missing: Vec<&str> = SHUTDOWN_STEP_ALL
+        .iter()
+        .copied()
+        .filter(|s| !done.contains(s))
+        .collect();
+    format!(
+        "done: [{}]; missing: [{}]",
+        done.join(", "),
+        missing.join(", ")
+    )
+}
+
 /// Ask the server to shut down gracefully (used by tray exit, /api/tray/exit
 /// and the restart handler).
 pub fn request_shutdown() {
+    SHUTTING_DOWN.store(true, Ordering::Release);
     if let Some(tx) = SHUTDOWN_TX.get() {
         let _ = tx.send(true);
     }
+}
+
+/// True once a graceful shutdown has been requested (P0-1). Blocking helper
+/// threads (tray command runner) poll this to stop instead of parking forever
+/// on a channel whose sender outlives the tray thread.
+pub fn shutdown_requested() -> bool {
+    SHUTTING_DOWN.load(Ordering::Acquire)
 }
 
 /// Simple request log middleware (zero deps: method path status latency).
@@ -123,8 +170,58 @@ async fn log_requests(req: axum::extract::Request, next: Next) -> Response {
     res
 }
 
-#[tokio::main]
-async fn main() {
+// P0-1: manual runtime instead of #[tokio::main]. The tray command runner
+// below parks on cmd_rx.recv() inside spawn_blocking; tray.rs keeps a Sender
+// alive in a static, so the channel never closes and the blocking pool would
+// never drain after main() returns. A default tokio runtime tear-down waits
+// for running spawn_blocking tasks -> the process hung as a zombie after
+// "[FlyGo] bye". Building the runtime here lets us stop it explicitly with
+// shutdown_timeout at the end of the graceful tail.
+fn main() {
+    // P0-1 companion: if run() panics before its graceful tail, the runtime
+    // drop would wait forever on the tray cmd-runner (which only exits when
+    // shutdown_requested() turns true). Mark shutdown inside the panic hook
+    // so a panicking run() can still unwind and exit instead of hanging.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        SHUTTING_DOWN.store(true, Ordering::Release);
+        default_hook(info);
+    }));
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime");
+    runtime.block_on(run());
+    // Stop the runtime. All infinite blocking helpers (tray cmd runner) now
+    // observe shutdown_requested() and return, so this normally completes
+    // quickly; the timeout only bounds a stuck blocking task. Spawned tasks
+    // were already aborted in run()'s tail.
+    runtime.shutdown_timeout(std::time::Duration::from_secs(3));
+    if GRACEFUL_COMPLETE.load(Ordering::Acquire) {
+        // Everything cleaned up: let the process exit naturally.
+        return;
+    }
+    // Forced-exit fallback: graceful shutdown did not fully complete (stuck
+    // helper thread / blocking task). Structured-log the done/missing
+    // checklist so the on-disk log always shows how far the tail got, then
+    // hard-exit (best-effort actions already ran; missing ones are logged).
+    let done = SHUTDOWN_STEPS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    log::log(
+        "WARN",
+        "FlyGo.shutdown",
+        &format!("graceful shutdown incomplete, forced exit ({})", shutdown_report(&done)),
+    );
+    eprintln!(
+        "[FlyGo] graceful shutdown incomplete, forced exit ({})",
+        shutdown_report(&done)
+    );
+    std::process::exit(0);
+}
+
+async fn run() {
     // Velopack (T-10) hooks MUST run first: the crate parses its own
     // command-line switches (--velopack-*) and needs to observe them before
     // any other startup code. on_before_uninstall removes the SMB shares this
@@ -160,9 +257,8 @@ async fn main() {
         // feedback instead of silently dying: open the panel page in the
         // default browser so the user always "sees something happen". The
         // launcher binary already does this; this covers direct flygo.exe use.
-        let _ = std::process::Command::new("cmd")
+        let _ = crate::winproc::hidden_command("cmd")
             .args(["/c", "start", "", settings::get().panel_browser_url().as_str()])
-            .creation_flags(0x0800_0000)
             .spawn();
         std::process::exit(1);
     }
@@ -217,11 +313,20 @@ async fn main() {
     let _ = SHUTDOWN_TX.set(sh_tx);
     *SHUTDOWN_RX.lock().unwrap_or_else(|e| e.into_inner()) = Some(sh_rx);
 
-    // 6) tray menu command runner (blocking thread; executes daemon actions)
+    // 6) tray menu command runner (blocking thread; executes daemon actions).
+    // P0-1: polls shutdown_requested() so the loop stops on graceful shutdown
+    // instead of parking on recv() forever (CMD_TX keeps a sender alive in a
+    // static, so the channel never closes; a parked recv() here used to keep
+    // the tokio blocking pool - and the whole process - alive after "bye").
     {
         let daemon_state = daemon_state.clone();
         tokio::task::spawn_blocking(move || {
-            while let Ok(cmd) = cmd_rx.recv() {
+            while !shutdown_requested() {
+                let cmd = match cmd_rx.recv_timeout(std::time::Duration::from_millis(500)) {
+                    Ok(cmd) => cmd,
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                };
                 match cmd {
                     tray::TrayCmd::ToggleDocker => {
                         crate::log::log("INFO", "tray.cmd", "docker engine toggle requested");
@@ -298,9 +403,6 @@ async fn main() {
 
     // --- axum router (existing routes unchanged) ---
     let state = AppState {
-        mirror_log: config::get().mirror_log.clone(),
-        mirror_src: config::get().mirror_src.clone(),
-        mirror_dst: config::get().mirror_dst.clone(),
         daemon: daemon_state.clone(),
     };
 
@@ -326,6 +428,28 @@ async fn main() {
         .route("/api/sync/link", post(api::sync::create_link))
         .route("/api/sync/links", get(api::sync::list_links))
         .route("/api/sync/links/:id", delete(api::sync::delete_link))
+        // Pending devices/folders (phone pairing closure); these handlers
+        // need no SyncState, they ride the sub-router for route cohesion.
+        .route("/api/sync/pending", get(api::sync::pending))
+        .route(
+            "/api/sync/pending/devices/:id/accept",
+            post(api::sync::accept_pending_device),
+        )
+        .route(
+            "/api/sync/pending/devices/:id/dismiss",
+            delete(api::sync::dismiss_pending_device),
+        )
+        .route(
+            "/api/sync/pending/folders/:folder/:device/accept",
+            post(api::sync::accept_pending_folder),
+        )
+        .route(
+            "/api/sync/pending/folders/:folder/:device/dismiss",
+            delete(api::sync::dismiss_pending_folder),
+        )
+        // Phone-to-phone relay (D6): share an existing folder with paired
+        // devices so two phones sync through this PC.
+        .route("/api/sync/folders/:id/share", post(api::sync::share_folder))
         .with_state(sync_state);
 
     // vdisp mode routes ride their own sub-router (state = the shared pin
@@ -360,7 +484,7 @@ async fn main() {
                     let h = tokio::task::spawn_blocking(api::health::collect_health)
                         .await
                         .unwrap_or_else(|_| api::health::fallback_health());
-                    serde_json::to_value(h).unwrap_or_else(|_| serde_json::json!(null))
+                    serde_json::to_value(h).unwrap_or(serde_json::json!(null))
                 })
             });
             p
@@ -369,7 +493,7 @@ async fn main() {
             let p: api::wsstatus::Provider = Arc::new(|| {
                 Box::pin(async {
                     let s = api::system::cached_system().await;
-                    serde_json::to_value(s).unwrap_or_else(|_| serde_json::json!(null))
+                    serde_json::to_value(s).unwrap_or(serde_json::json!(null))
                 })
             });
             p
@@ -574,9 +698,12 @@ async fn main() {
     // keepalive). Progress is visible at GET /api/boot/status
     // (binding -> stale_cleanup -> smb -> children -> selfcheck -> ready).
     // Every step degrades gracefully; none of them can kill the panel.
+    // P0-1: the handle is tracked in bg_tasks so shutdown can abort it, and
+    // each stage bails out once shutdown was requested (never respawn
+    // children or the keepalive thread while the tail is tearing down).
     {
         let daemon_state = daemon_state.clone();
-        tokio::spawn(async move {
+        bg_tasks.push(tokio::spawn(async move {
             api::boot::set_stage("stale_cleanup");
             let bg_t0 = std::time::Instant::now();
             let _ = tokio::task::spawn_blocking(daemon::cleanup_stale).await;
@@ -585,6 +712,9 @@ async fn main() {
                 "FlyGo.boot",
                 &format!("stale cleanup done in {}ms", bg_t0.elapsed().as_millis()),
             );
+            if shutdown_requested() {
+                return;
+            }
             api::boot::set_stage("smb");
             let smb_start = std::time::Instant::now();
             let _ = tokio::task::spawn_blocking(smb::open_app).await;
@@ -593,6 +723,9 @@ async fn main() {
                 "FlyGo.boot",
                 &format!("SMB lifecycle ready in {}ms", smb_start.elapsed().as_millis()),
             );
+            if shutdown_requested() {
+                return;
+            }
             api::boot::set_stage("children");
             for name in daemon::DEFAULT_COMPONENTS {
                 match daemon_state.start(name) {
@@ -606,6 +739,9 @@ async fn main() {
                     }
                 }
             }
+            if shutdown_requested() {
+                return;
+            }
             api::boot::set_stage("selfcheck");
             // WSL keepalive + boot selfcheck (guard-design.md stage 1+2):
             // background threads; failures don't block startup.
@@ -616,7 +752,7 @@ async fn main() {
                 "FlyGo.boot",
                 &format!("background startup ready in {}ms", bg_t0.elapsed().as_millis()),
             );
-        });
+        }));
     }
 
     match serve_handle.await {
@@ -626,10 +762,14 @@ async fn main() {
     }
 
     // Shutdown: stop children, release the instance mutex, clean up the tray.
+    // P0-1: mark shutdown early so late starters (boot task, keepalive thread,
+    // tray cmd runner) observe it and stand down instead of spawning new work.
+    SHUTTING_DOWN.store(true, Ordering::Release);
     log::log("INFO", "FlyGo.shutdown", "shutting down; stopping background children");
     eprintln!("[FlyGo] shutting down; stopping background children");
     let t0 = std::time::Instant::now();
     daemon_state.kill_all();
+    record_shutdown_step("children");
     log::log(
         "INFO",
         "FlyGo.shutdown",
@@ -640,36 +780,38 @@ async fn main() {
     // the disks. Best-effort (a removed drive share is a no-op).
     let smb_t0 = std::time::Instant::now();
     smb::close_app();
+    record_shutdown_step("smb");
     log::log(
         "INFO",
         "FlyGo.shutdown",
         &format!("SMB close done in {}ms", smb_t0.elapsed().as_millis()),
     );
     // WSL graceful degradation: drop the keepalive session; terminate the
-    // distro right away when the engine target is off (frees RAM).
+    // distro right away when the engine target is off (frees RAM). This also
+    // sets the keepalive stop flag so the detached keepalive thread drains.
     daemon::shutdown_wsl();
+    record_shutdown_step("wsl-keepalive");
     // Abort the long-lived background tokio tasks (sync ticker / usb guard /
-    // vdisp guard / heartbeat / ws ticker) so the #[tokio::main] runtime can
-    // drop and the process actually exits. They are infinite loops; without
-    // this, `main()` returning leaves the runtime waiting forever (zombie).
+    // vdisp guard / heartbeat / ws ticker / late boot-start task) so the
+    // runtime can be stopped explicitly in main(). They are infinite loops
+    // parked on interval ticks; without this, runtime shutdown would wait on
+    // them forever.
     for h in bg_tasks.drain(..) {
         h.abort();
     }
+    record_shutdown_step("bg-tasks");
     daemon::release_single_instance();
+    record_shutdown_step("instance-mutex");
     tray::request_tray_cleanup();
     std::thread::sleep(std::time::Duration::from_millis(400)); // let the tray icon go
+    record_shutdown_step("tray");
     log::log("INFO", "FlyGo.shutdown", "[FlyGo] bye");
     eprintln!("[FlyGo] bye");
-    // Force the process to terminate. All graceful cleanup (children, SMB
-    // shares, keepalive session, instance mutex, tray icon) above has
-    // completed; we still hard-exit here because detached std threads and the
-    // tokio runtime's own worker threads (WSL keepalive, sync ticker, usb
-    // guard, vdisp guard, heartbeat, ws ticker) can otherwise keep the process
-    // alive forever after `main()` returns. A non-zero delay here leaves a
-    // zombie "closed" panel. NOTE: this is intentionally in main()'s tail, NOT
-    // the tray thread - the tray thread must never call exit() (it would race
-    // the cleanup above); see tray.rs.
-    std::process::exit(0);
+    // P0-1: the full graceful tail completed. main() returns and lets the
+    // process exit naturally; runtime shutdown_timeout(3s) in main() only
+    // bounds a stuck blocking task, and the forced-exit fallback (with its
+    // done/missing checklist log) runs only when the tail did NOT complete.
+    GRACEFUL_COMPLETE.store(true, Ordering::Release);
 }
 
 /// Wait for Ctrl+C or a shutdown request (tray exit / API exit / restart).
@@ -687,6 +829,11 @@ async fn shutdown_signal() {
             }
         } => {}
     }
+    // Mark shutdown the moment the signal fires (not in run()'s tail): a
+    // boot task could otherwise pass its shutdown_requested() check in the
+    // window between the signal and the tail, spawning a child the tail
+    // then kills concurrently (orphan race on Ctrl+C).
+    SHUTTING_DOWN.store(true, Ordering::Release);
     log::log("INFO", "FlyGo.shutdown", "shutdown signal received");
     eprintln!("[FlyGo] shutdown signal received");
 }
@@ -698,12 +845,11 @@ const INDEX_HTML: &str = include_str!("../static/index.html");
 /// Device-agnostic: never assume a fixed node IP. None when Tailscale is
 /// not installed / not running / not on PATH.
 fn tailnet_ip() -> Option<String> {
-    let out = std::process::Command::new("tailscale")
+    let out = crate::winproc::hidden_command("tailscale")
         .args(["ip", "-4"])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
-        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
         .output()
         .ok()?;
     if !out.status.success() {
@@ -734,9 +880,8 @@ async fn index() -> impl IntoResponse {
 /// URL derives from the effective panel address ([server].addr / env).
 fn open_panel_browser() {
     let url = settings::get().panel_browser_url();
-    let _ = std::process::Command::new("cmd")
+    let _ = crate::winproc::hidden_command("cmd")
         .args(["/c", "start", "", url.as_str()])
-        .creation_flags(0x0800_0000)
         .spawn();
 }
 
@@ -753,5 +898,47 @@ impl IntoResponse for ApiError {
             serde_json::json!({"ok": false, "error": self.0}).to_string(),
         )
             .into_response()
+    }
+}
+
+#[cfg(test)]
+mod shutdown_report_tests {
+    use super::{shutdown_report, SHUTDOWN_STEP_ALL};
+
+    #[test]
+    fn report_lists_missing_steps_when_nothing_done() {
+        let r = shutdown_report(&[]);
+        assert_eq!(r, "done: []; missing: [children, smb, wsl-keepalive, bg-tasks, instance-mutex, tray]");
+    }
+
+    #[test]
+    fn report_lists_done_and_missing() {
+        let done = ["children", "smb", "wsl-keepalive", "bg-tasks", "instance-mutex", "tray"];
+        let r = shutdown_report(&done);
+        assert_eq!(r, "done: [children, smb, wsl-keepalive, bg-tasks, instance-mutex, tray]; missing: []");
+    }
+
+    #[test]
+    fn report_partial() {
+        let done = ["children", "smb"];
+        let r = shutdown_report(&done);
+        assert_eq!(r, "done: [children, smb]; missing: [wsl-keepalive, bg-tasks, instance-mutex, tray]");
+    }
+
+    #[test]
+    fn full_checklist_has_no_duplicates() {
+        // Every step name must be unique or the done/missing report lies.
+        let mut names = SHUTDOWN_STEP_ALL.to_vec();
+        names.sort_unstable();
+        let n = names.len();
+        names.dedup();
+        assert_eq!(names.len(), n);
+    }
+
+    #[test]
+    fn report_ignores_unknown_done_entries() {
+        let done = ["children", "not-a-step"];
+        let r = shutdown_report(&done);
+        assert_eq!(r, "done: [children, not-a-step]; missing: [smb, wsl-keepalive, bg-tasks, instance-mutex, tray]");
     }
 }

@@ -9,7 +9,7 @@ use std::process::Command;
 /// CREATE_NO_WINDOW: keep the spawned console app (powershell.exe) from
 /// flashing a black window. GUI parent + console child == visible console
 /// unless this flag is set.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::winproc::CREATE_NO_WINDOW;
 
 #[derive(Serialize, Clone)]
 pub struct SysTask {
@@ -82,7 +82,9 @@ fn ps(script: &str) -> String {
 
 /// 硬盘健康探测：Get-StorageReliabilityCounter（Windows in-box），返回 (物理盘号 -> (温度, 磨损, 读错误))。
 /// 取不到的盘不放入 map（默认缺省即无 SMART 数据）。仅一次阻塞调用。
-fn disk_smart() -> std::collections::HashMap<u32, (Option<f64>, Option<f64>, Option<u64>)> {
+type SmartMap = std::collections::HashMap<u32, (Option<f64>, Option<f64>, Option<u64>)>;
+
+fn disk_smart() -> SmartMap {
     let mut map = std::collections::HashMap::new();
     let out = ps(
         r#"Get-PhysicalDisk | ForEach-Object { $n=$_.DeviceId; $r=$_ | Get-StorageReliabilityCounter -ErrorAction SilentlyContinue; if($r){ Write-Output ("SMART=$n|" + $r.Temperature + "|" + $r.Wear + "|" + $r.ReadErrorsTotal) } }"#,
@@ -464,8 +466,8 @@ fn parse_usb_status(out: &str) -> (Vec<UsbVolume>, Vec<UsbDisk>, std::collection
             }
         }
     }
-    vols.sort_by(|a, b| a.letter.cmp(&b.letter));
-    disks.sort_by(|a, b| a.number.cmp(&b.number));
+    vols.sort_by_key(|d| d.letter.clone());
+    disks.sort_by_key(|d| d.number);
     (vols, disks, pdvol)
 }
 

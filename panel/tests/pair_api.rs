@@ -15,10 +15,19 @@
 //
 // All code comments are pure ASCII.
 
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/settings.rs"]
 mod settings;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/config.rs"]
 mod config;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/api/pair.rs"]
 mod pair;
 
@@ -245,10 +254,12 @@ fn pair_api_over_http() {
         assert_eq!(v["ok"], true, "create failed: {v}");
         assert_eq!(v["code"], "246810");
         assert_eq!(v["my_syncthing_id"], MY_ID);
-        let invites = mocks.invite_calls.lock().unwrap();
-        assert_eq!(invites.len(), 1);
-        assert_eq!(invites[0], json!({"syncthing_id": MY_ID}), "invite relays the device id only");
-        drop(invites);
+        // Lock guards are scoped so none is held across the awaits below.
+        {
+            let invites = mocks.invite_calls.lock().unwrap();
+            assert_eq!(invites.len(), 1);
+            assert_eq!(invites[0], json!({"syncthing_id": MY_ID}), "invite relays the device id only");
+        }
 
         // status (invite outstanding, poll still pending).
         let v: Value = agent.get(&format!("{base}/api/pair/status")).call().unwrap().into_json().unwrap();
@@ -283,15 +294,17 @@ fn pair_api_over_http() {
         assert_eq!(code, 200, "join against live mocks must succeed");
         assert_eq!(v["ok"], true);
         assert_eq!(v["peer_syncthing_id"], INVITER_ID);
-        let accepts = mocks.accept_calls.lock().unwrap();
-        assert_eq!(accepts.len(), 1);
-        assert_eq!(accepts[0]["code"], "246810");
-        assert_eq!(accepts[0]["accepter_syncthing_id"], MY_ID);
-        drop(accepts);
-        let devs = mocks.devices_put.lock().unwrap();
-        assert_eq!(devs.len(), 2);
-        assert_eq!(devs[1]["deviceID"], INVITER_ID);
-        drop(devs);
+        {
+            let accepts = mocks.accept_calls.lock().unwrap();
+            assert_eq!(accepts.len(), 1);
+            assert_eq!(accepts[0]["code"], "246810");
+            assert_eq!(accepts[0]["accepter_syncthing_id"], MY_ID);
+        }
+        {
+            let devs = mocks.devices_put.lock().unwrap();
+            assert_eq!(devs.len(), 2);
+            assert_eq!(devs[1]["deviceID"], INVITER_ID);
+        }
 
         // bad code shape -> 400 without touching the network
         let (code, _) = req("POST", "/api/pair/join", Some(r#"{"code":"abc"}"#.to_string()));
@@ -308,7 +321,6 @@ fn pair_api_over_http() {
             Some(json!({"paths": [real_path, missing]}).to_string()),
         );
         assert_eq!(code, 200);
-        let v = v;
         assert_eq!(v["ok"], false, "one failed path -> overall ok=false");
         let results = v["results"].as_array().unwrap();
         assert_eq!(results.len(), 2);

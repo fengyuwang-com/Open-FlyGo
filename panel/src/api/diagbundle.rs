@@ -17,7 +17,6 @@ use crate::ApiResult;
 use axum::{
     http::{header, StatusCode},
     response::IntoResponse,
-    Json,
 };
 use serde_json::json;
 
@@ -169,6 +168,24 @@ pub async fn bundle() -> ApiResult<axum::response::Response> {
         .root
         .join("data")
         .join(format!("flygo-diag-{stamp}.json"));
+    // Defense-in-depth: refuse to write/read any artifact whose file name is
+    // on the export deny-list (control-state* / .bak / .env / key material).
+    // The generated name never matches today; the guard keeps a future edit
+    // from silently widening what lands in the bundle.
+    let fname = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    if is_export_blocked(&fname) {
+        crate::log::log("WARN", "diag.bundle", "bundle path hit export deny-list; disk copy skipped");
+        let body = serde_json::to_vec_pretty(&value).unwrap_or_default();
+        return Ok((
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
+            body,
+        )
+            .into_response());
+    }
     let disk = std::fs::write(&path, serde_json::to_vec_pretty(&value).unwrap_or_default());
     crate::log::log(
         "INFO",
@@ -200,6 +217,35 @@ fn chrono_stamp() -> String {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     format!("{secs:010x}") // hex epoch: short, unique, sortable
+}
+
+/// Files that must NEVER end up in any export/diagnostic artifact. The
+/// bundle is built from structured fields only (no directory walks), but
+/// this deny-list is a guard for future changes: control-state.json and
+/// its .bak generation hold plaintext control-plane activation state, and
+/// .bak/.env/PEM copies are the classic leak channel (same reasoning as
+/// scripts/check-secrets.sh PATH_RULES).
+const EXPORT_BLOCKED_FILES: [&str; 3] = [
+    "control-state.json",
+    "control-state.json.bak",
+    "control-state.tmp",
+];
+
+/// True when the given file name is barred from any export/bundle. Matches
+/// the exact control-state names plus the generic sensitive-suffix rules
+/// (.bak, .env, .pem/.key/.p12/.pfx).
+pub fn is_export_blocked(file_name: &str) -> bool {
+    let lower = file_name.to_lowercase();
+    if EXPORT_BLOCKED_FILES.contains(&lower.as_str()) {
+        return true;
+    }
+    lower.ends_with(".bak")
+        || lower.ends_with(".env")
+        || lower.ends_with(".pem")
+        || lower.ends_with(".key")
+        || lower.ends_with(".p12")
+        || lower.ends_with(".pfx")
+        || lower.starts_with("control-state")
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +280,23 @@ mod tests {
         // PEM blocks dropped (header split so check-secrets does not flag this source)
         let pem_header = format!("-----BEGIN {} KEY-----", "PRIVATE");
         assert_eq!(redact_line(&pem_header), "");
+    }
+
+    #[test]
+    fn export_deny_list_blocks_control_state_and_secret_copies() {
+        // Plaintext control-plane activation state must never be exported -
+        // neither the live file, its .bak generation, nor a tmp write.
+        assert!(is_export_blocked("control-state.json"));
+        assert!(is_export_blocked("control-state.json.bak"));
+        assert!(is_export_blocked("control-state.tmp"));
+        assert!(is_export_blocked("CONTROL-STATE.JSON.BAK"));
+        assert!(is_export_blocked("control-state.json.2026.bak"));
+        assert!(is_export_blocked("term_token.env"));
+        assert!(is_export_blocked("server.key"));
+        // Ordinary artifacts stay exportable.
+        assert!(!is_export_blocked("flygo-diag-000001a2b3.json"));
+        assert!(!is_export_blocked("flygo.log"));
+        assert!(!is_export_blocked("settings.toml"));
     }
 
     #[test]

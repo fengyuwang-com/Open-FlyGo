@@ -15,6 +15,9 @@
 //
 // All code comments are pure ASCII.
 
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/api/wsstatus.rs"]
 mod wsstatus;
 

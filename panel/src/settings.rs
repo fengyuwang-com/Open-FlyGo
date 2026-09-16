@@ -222,6 +222,7 @@ pub struct FeatureFlags {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(default)]
+#[derive(Default)]
 pub struct FlagsCfg {
     pub feature: FeatureFlags,
 }
@@ -256,6 +257,7 @@ pub struct ControlCfg {
 /// touch the section).
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(default)]
+#[derive(Default)]
 pub struct AuthCfg {
     pub enabled: bool,
     pub password: String,
@@ -269,17 +271,13 @@ pub struct AuthCfg {
 /// the built-in default.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(default)]
+#[derive(Default)]
 pub struct SmbShareItem {
     pub name: String,
     pub path: String,
     pub grant: String,
 }
 
-impl Default for SmbShareItem {
-    fn default() -> Self {
-        SmbShareItem { name: String::new(), path: String::new(), grant: String::new() }
-    }
-}
 
 /// [smb] — SMB share lifecycle ("open the app, the drives appear on the
 /// network"; stop the app, they disappear). The panel creates each
@@ -323,6 +321,7 @@ impl Default for SmbCfg {
 /// the built-in default; only a type error is reported.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(default)]
+#[derive(Default)]
 pub struct FileConfig {
     pub server: ServerCfg,
     pub webcli: WebcliCfg,
@@ -477,11 +476,6 @@ impl Default for FeatureFlags {
         FeatureFlags { auto_retry: true, usb_eject: true }
     }
 }
-impl Default for FlagsCfg {
-    fn default() -> Self {
-        FlagsCfg { feature: FeatureFlags::default() }
-    }
-}
 impl Default for TrayCfg {
     fn default() -> Self {
         TrayCfg { balloon_ms: 6000 }
@@ -496,12 +490,6 @@ impl Default for ControlCfg {
             heartbeat_secs: DEFAULT_CONTROL_HEARTBEAT_SECS,
             upload_max_mb: DEFAULT_CONTROL_UPLOAD_MAX_MB,
         }
-    }
-}
-impl Default for AuthCfg {
-    fn default() -> Self {
-        // Default OFF: the panel stays open exactly like the pre-auth builds.
-        AuthCfg { enabled: false, password: String::new() }
     }
 }
 /// [openlist] — 自动把本机盘符同步为 OpenList 本地存储（"插盘即在列表里"）。
@@ -525,31 +513,6 @@ impl Default for OpenlistCfg {
             base_url: "http://127.0.0.1:5244".into(),
             username: String::new(),
             password: String::new(),
-        }
-    }
-}
-impl Default for FileConfig {
-    fn default() -> Self {
-        FileConfig {
-            server: ServerCfg::default(),
-            webcli: WebcliCfg::default(),
-            term: TermCfg::default(),
-            sync: SyncCfg::default(),
-            daemon: DaemonCfg::default(),
-            wsl: WslCfg::default(),
-            docker: DockerCfg::default(),
-            health: HealthCfg::default(),
-            system: SystemCfg::default(),
-            access: AccessCfg::default(),
-            services: ServicesCfg::default(),
-            ui: UiCfg::default(),
-            launcher: LauncherCfg::default(),
-            flags: FlagsCfg::default(),
-            tray: TrayCfg::default(),
-            control: ControlCfg::default(),
-            auth: AuthCfg::default(),
-            openlist: OpenlistCfg::default(),
-            smb: SmbCfg::default(),
         }
     }
 }
@@ -911,14 +874,14 @@ impl Settings {
     pub fn control_heartbeat_secs(&self) -> u64 {
         env_ok("FENGPAGE_CONTROL_HEARTBEAT_SECS")
             .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or_else(|| self.raw.control.heartbeat_secs)
+            .unwrap_or(self.raw.control.heartbeat_secs)
     }
 
     /// POST /api/upload size cap in MB (env FENGPAGE_CONTROL_UPLOAD_MAX_MB).
     pub fn control_upload_max_mb(&self) -> u64 {
         env_ok("FENGPAGE_CONTROL_UPLOAD_MAX_MB")
             .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or_else(|| self.raw.control.upload_max_mb)
+            .unwrap_or(self.raw.control.upload_max_mb)
     }
 
     // ---- [auth] effective accessors (file-only, no env override) ----
@@ -1225,104 +1188,104 @@ pub fn effective_json(self_s: &Settings) -> Value {
     json!({
         "server": {
             "addr": eff(addr, addr_src.label()),
-            "bind_retries": eff(&self_s.raw.server.bind_retries, src_of(&self_s.raw.server.bind_retries, &def.server.bind_retries)),
-            "bind_retry_ms": eff(&self_s.raw.server.bind_retry_ms, src_of(&self_s.raw.server.bind_retry_ms, &def.server.bind_retry_ms)),
+            "bind_retries": eff(self_s.raw.server.bind_retries, src_of(&self_s.raw.server.bind_retries, &def.server.bind_retries)),
+            "bind_retry_ms": eff(self_s.raw.server.bind_retry_ms, src_of(&self_s.raw.server.bind_retry_ms, &def.server.bind_retry_ms)),
         },
         "webcli": {
             "host": eff(&self_s.raw.webcli.host, src_of(&self_s.raw.webcli.host, &def.webcli.host)),
-            "port": eff(&self_s.raw.webcli.port, src_of(&self_s.raw.webcli.port, &def.webcli.port)),
+            "port": eff(self_s.raw.webcli.port, src_of(&self_s.raw.webcli.port, &def.webcli.port)),
             "shell": eff(&self_s.raw.webcli.shell, src_of(&self_s.raw.webcli.shell, &def.webcli.shell)),
         },
         "term": {
-            "session_ttl_hours": eff(&self_s.raw.term.session_ttl_hours, src_of(&self_s.raw.term.session_ttl_hours, &def.term.session_ttl_hours)),
-            "password_min_len": eff(&self_s.raw.term.password_min_len, src_of(&self_s.raw.term.password_min_len, &def.term.password_min_len)),
+            "session_ttl_hours": eff(self_s.raw.term.session_ttl_hours, src_of(&self_s.raw.term.session_ttl_hours, &def.term.session_ttl_hours)),
+            "password_min_len": eff(self_s.raw.term.password_min_len, src_of(&self_s.raw.term.password_min_len, &def.term.password_min_len)),
             "webcli_addr": webcli_addr,
         },
         "sync": {
-            "interval_secs": eff(&self_s.raw.sync.interval_secs, src_of(&self_s.raw.sync.interval_secs, &def.sync.interval_secs)),
+            "interval_secs": eff(self_s.raw.sync.interval_secs, src_of(&self_s.raw.sync.interval_secs, &def.sync.interval_secs)),
             "syncthing_addr": eff(&self_s.raw.sync.syncthing_addr, src_of(&self_s.raw.sync.syncthing_addr, &def.sync.syncthing_addr)),
-            "timeout_secs": eff(&self_s.raw.sync.timeout_secs, src_of(&self_s.raw.sync.timeout_secs, &def.sync.timeout_secs)),
-            "sync_timeout_secs": eff(&self_s.raw.sync.sync_timeout_secs, src_of(&self_s.raw.sync.sync_timeout_secs, &def.sync.sync_timeout_secs)),
-            "onboarding_timeout_secs": eff(&self_s.raw.sync.onboarding_timeout_secs, src_of(&self_s.raw.sync.onboarding_timeout_secs, &def.sync.onboarding_timeout_secs)),
+            "timeout_secs": eff(self_s.raw.sync.timeout_secs, src_of(&self_s.raw.sync.timeout_secs, &def.sync.timeout_secs)),
+            "sync_timeout_secs": eff(self_s.raw.sync.sync_timeout_secs, src_of(&self_s.raw.sync.sync_timeout_secs, &def.sync.sync_timeout_secs)),
+            "onboarding_timeout_secs": eff(self_s.raw.sync.onboarding_timeout_secs, src_of(&self_s.raw.sync.onboarding_timeout_secs, &def.sync.onboarding_timeout_secs)),
         },
         "daemon": {
-            "usb_poll_secs": eff(&self_s.raw.daemon.usb_poll_secs, src_of(&self_s.raw.daemon.usb_poll_secs, &def.daemon.usb_poll_secs)),
-            "probe_timeout_secs": eff(&self_s.raw.daemon.probe_timeout_secs, src_of(&self_s.raw.daemon.probe_timeout_secs, &def.daemon.probe_timeout_secs)),
-            "vdisp_cache_secs": eff(&self_s.raw.daemon.vdisp_cache_secs, src_of(&self_s.raw.daemon.vdisp_cache_secs, &def.daemon.vdisp_cache_secs)),
-            "instance_retries": eff(&self_s.raw.daemon.instance_retries, src_of(&self_s.raw.daemon.instance_retries, &def.daemon.instance_retries)),
-            "instance_retry_ms": eff(&self_s.raw.daemon.instance_retry_ms, src_of(&self_s.raw.daemon.instance_retry_ms, &def.daemon.instance_retry_ms)),
-            "eject_grace_secs": eff(&self_s.raw.daemon.eject_grace_secs, src_of(&self_s.raw.daemon.eject_grace_secs, &def.daemon.eject_grace_secs)),
+            "usb_poll_secs": eff(self_s.raw.daemon.usb_poll_secs, src_of(&self_s.raw.daemon.usb_poll_secs, &def.daemon.usb_poll_secs)),
+            "probe_timeout_secs": eff(self_s.raw.daemon.probe_timeout_secs, src_of(&self_s.raw.daemon.probe_timeout_secs, &def.daemon.probe_timeout_secs)),
+            "vdisp_cache_secs": eff(self_s.raw.daemon.vdisp_cache_secs, src_of(&self_s.raw.daemon.vdisp_cache_secs, &def.daemon.vdisp_cache_secs)),
+            "instance_retries": eff(self_s.raw.daemon.instance_retries, src_of(&self_s.raw.daemon.instance_retries, &def.daemon.instance_retries)),
+            "instance_retry_ms": eff(self_s.raw.daemon.instance_retry_ms, src_of(&self_s.raw.daemon.instance_retry_ms, &def.daemon.instance_retry_ms)),
+            "eject_grace_secs": eff(self_s.raw.daemon.eject_grace_secs, src_of(&self_s.raw.daemon.eject_grace_secs, &def.daemon.eject_grace_secs)),
         },
         "wsl": {
             "distro": eff(&self_s.raw.wsl.distro, src_of(&self_s.raw.wsl.distro, &def.wsl.distro)),
-            "keepalive_poll_secs": eff(&self_s.raw.wsl.keepalive_poll_secs, src_of(&self_s.raw.wsl.keepalive_poll_secs, &def.wsl.keepalive_poll_secs)),
-            "cmd_timeout_secs": eff(&self_s.raw.wsl.cmd_timeout_secs, src_of(&self_s.raw.wsl.cmd_timeout_secs, &def.wsl.cmd_timeout_secs)),
-            "ps_timeout_secs": eff(&self_s.raw.wsl.ps_timeout_secs, src_of(&self_s.raw.wsl.ps_timeout_secs, &def.wsl.ps_timeout_secs)),
-            "vm_wait_secs": eff(&self_s.raw.wsl.vm_wait_secs, src_of(&self_s.raw.wsl.vm_wait_secs, &def.wsl.vm_wait_secs)),
-            "vm_poll_step_secs": eff(&self_s.raw.wsl.vm_poll_step_secs, src_of(&self_s.raw.wsl.vm_poll_step_secs, &def.wsl.vm_poll_step_secs)),
+            "keepalive_poll_secs": eff(self_s.raw.wsl.keepalive_poll_secs, src_of(&self_s.raw.wsl.keepalive_poll_secs, &def.wsl.keepalive_poll_secs)),
+            "cmd_timeout_secs": eff(self_s.raw.wsl.cmd_timeout_secs, src_of(&self_s.raw.wsl.cmd_timeout_secs, &def.wsl.cmd_timeout_secs)),
+            "ps_timeout_secs": eff(self_s.raw.wsl.ps_timeout_secs, src_of(&self_s.raw.wsl.ps_timeout_secs, &def.wsl.ps_timeout_secs)),
+            "vm_wait_secs": eff(self_s.raw.wsl.vm_wait_secs, src_of(&self_s.raw.wsl.vm_wait_secs, &def.wsl.vm_wait_secs)),
+            "vm_poll_step_secs": eff(self_s.raw.wsl.vm_poll_step_secs, src_of(&self_s.raw.wsl.vm_poll_step_secs, &def.wsl.vm_poll_step_secs)),
         },
         "docker": {
-            "status_timeout_secs": eff(&self_s.raw.docker.status_timeout_secs, src_of(&self_s.raw.docker.status_timeout_secs, &def.docker.status_timeout_secs)),
-            "action_timeout_secs": eff(&self_s.raw.docker.action_timeout_secs, src_of(&self_s.raw.docker.action_timeout_secs, &def.docker.action_timeout_secs)),
+            "status_timeout_secs": eff(self_s.raw.docker.status_timeout_secs, src_of(&self_s.raw.docker.status_timeout_secs, &def.docker.status_timeout_secs)),
+            "action_timeout_secs": eff(self_s.raw.docker.action_timeout_secs, src_of(&self_s.raw.docker.action_timeout_secs, &def.docker.action_timeout_secs)),
         },
         "health": {
-            "probe_timeout_secs": eff(&self_s.raw.health.probe_timeout_secs, src_of(&self_s.raw.health.probe_timeout_secs, &def.health.probe_timeout_secs)),
-            "color_green_max_ms": eff(&self_s.raw.health.color_green_max_ms, src_of(&self_s.raw.health.color_green_max_ms, &def.health.color_green_max_ms)),
-            "color_yellow_max_ms": eff(&self_s.raw.health.color_yellow_max_ms, src_of(&self_s.raw.health.color_yellow_max_ms, &def.health.color_yellow_max_ms)),
-            "error_rate_healthy_pct": eff(&self_s.raw.health.error_rate_healthy_pct, src_of(&self_s.raw.health.error_rate_healthy_pct, &def.health.error_rate_healthy_pct)),
-            "uptime_cache_secs": eff(&self_s.raw.health.uptime_cache_secs, src_of(&self_s.raw.health.uptime_cache_secs, &def.health.uptime_cache_secs)),
+            "probe_timeout_secs": eff(self_s.raw.health.probe_timeout_secs, src_of(&self_s.raw.health.probe_timeout_secs, &def.health.probe_timeout_secs)),
+            "color_green_max_ms": eff(self_s.raw.health.color_green_max_ms, src_of(&self_s.raw.health.color_green_max_ms, &def.health.color_green_max_ms)),
+            "color_yellow_max_ms": eff(self_s.raw.health.color_yellow_max_ms, src_of(&self_s.raw.health.color_yellow_max_ms, &def.health.color_yellow_max_ms)),
+            "error_rate_healthy_pct": eff(self_s.raw.health.error_rate_healthy_pct, src_of(&self_s.raw.health.error_rate_healthy_pct, &def.health.error_rate_healthy_pct)),
+            "uptime_cache_secs": eff(self_s.raw.health.uptime_cache_secs, src_of(&self_s.raw.health.uptime_cache_secs, &def.health.uptime_cache_secs)),
         },
         "system": {
-            "cache_ttl_secs": eff(&self_s.raw.system.cache_ttl_secs, src_of(&self_s.raw.system.cache_ttl_secs, &def.system.cache_ttl_secs)),
-            "route_stats_max": eff(&self_s.raw.system.route_stats_max, src_of(&self_s.raw.system.route_stats_max, &def.system.route_stats_max)),
-            "api_body_max_kb": eff(&self_s.raw.system.api_body_max_kb, src_of(&self_s.raw.system.api_body_max_kb, &def.system.api_body_max_kb)),
+            "cache_ttl_secs": eff(self_s.raw.system.cache_ttl_secs, src_of(&self_s.raw.system.cache_ttl_secs, &def.system.cache_ttl_secs)),
+            "route_stats_max": eff(self_s.raw.system.route_stats_max, src_of(&self_s.raw.system.route_stats_max, &def.system.route_stats_max)),
+            "api_body_max_kb": eff(self_s.raw.system.api_body_max_kb, src_of(&self_s.raw.system.api_body_max_kb, &def.system.api_body_max_kb)),
         },
         "access": {
-            "uac_wait_secs": eff(&self_s.raw.access.uac_wait_secs, src_of(&self_s.raw.access.uac_wait_secs, &def.access.uac_wait_secs)),
-            "cache_ttl_secs": eff(&self_s.raw.access.cache_ttl_secs, src_of(&self_s.raw.access.cache_ttl_secs, &def.access.cache_ttl_secs)),
-            "port_spec_max_len": eff(&self_s.raw.access.port_spec_max_len, src_of(&self_s.raw.access.port_spec_max_len, &def.access.port_spec_max_len)),
-            "label_max_len": eff(&self_s.raw.access.label_max_len, src_of(&self_s.raw.access.label_max_len, &def.access.label_max_len)),
-            "name_max_len": eff(&self_s.raw.access.name_max_len, src_of(&self_s.raw.access.name_max_len, &def.access.name_max_len)),
+            "uac_wait_secs": eff(self_s.raw.access.uac_wait_secs, src_of(&self_s.raw.access.uac_wait_secs, &def.access.uac_wait_secs)),
+            "cache_ttl_secs": eff(self_s.raw.access.cache_ttl_secs, src_of(&self_s.raw.access.cache_ttl_secs, &def.access.cache_ttl_secs)),
+            "port_spec_max_len": eff(self_s.raw.access.port_spec_max_len, src_of(&self_s.raw.access.port_spec_max_len, &def.access.port_spec_max_len)),
+            "label_max_len": eff(self_s.raw.access.label_max_len, src_of(&self_s.raw.access.label_max_len, &def.access.label_max_len)),
+            "name_max_len": eff(self_s.raw.access.name_max_len, src_of(&self_s.raw.access.name_max_len, &def.access.name_max_len)),
             "tailscale_cidr": eff(&self_s.raw.access.tailscale_cidr, src_of(&self_s.raw.access.tailscale_cidr, &def.access.tailscale_cidr)),
         },
         "services": {
             "default_start": eff(&self_s.raw.services.default_start, src_of(&self_s.raw.services.default_start, &def.services.default_start)),
             "ports": {
-                "webcli": eff(&self_s.raw.services.ports.webcli, src_of(&self_s.raw.services.ports.webcli, &def.services.ports.webcli)),
-                "syncthing": eff(&self_s.raw.services.ports.syncthing, src_of(&self_s.raw.services.ports.syncthing, &def.services.ports.syncthing)),
-                "homepage": eff(&self_s.raw.services.ports.homepage, src_of(&self_s.raw.services.ports.homepage, &def.services.ports.homepage)),
+                "webcli": eff(self_s.raw.services.ports.webcli, src_of(&self_s.raw.services.ports.webcli, &def.services.ports.webcli)),
+                "syncthing": eff(self_s.raw.services.ports.syncthing, src_of(&self_s.raw.services.ports.syncthing, &def.services.ports.syncthing)),
+                "homepage": eff(self_s.raw.services.ports.homepage, src_of(&self_s.raw.services.ports.homepage, &def.services.ports.homepage)),
             },
         },
         "ui": {
-            "poll_ms": eff(&self_s.raw.ui.poll_ms, src_of(&self_s.raw.ui.poll_ms, &def.ui.poll_ms)),
-            "tray_poll_ms": eff(&self_s.raw.ui.tray_poll_ms, src_of(&self_s.raw.ui.tray_poll_ms, &def.ui.tray_poll_ms)),
-            "phone_poll_ms": eff(&self_s.raw.ui.phone_poll_ms, src_of(&self_s.raw.ui.phone_poll_ms, &def.ui.phone_poll_ms)),
-            "embed_timeout_ms": eff(&self_s.raw.ui.embed_timeout_ms, src_of(&self_s.raw.ui.embed_timeout_ms, &def.ui.embed_timeout_ms)),
-            "boot_poll_ms": eff(&self_s.raw.ui.boot_poll_ms, src_of(&self_s.raw.ui.boot_poll_ms, &def.ui.boot_poll_ms)),
-            "boot_timeout_ms": eff(&self_s.raw.ui.boot_timeout_ms, src_of(&self_s.raw.ui.boot_timeout_ms, &def.ui.boot_timeout_ms)),
-            "embed_probe_ms": eff(&self_s.raw.ui.embed_probe_ms, src_of(&self_s.raw.ui.embed_probe_ms, &def.ui.embed_probe_ms)),
-            "fetch_retries": eff(&self_s.raw.ui.fetch_retries, src_of(&self_s.raw.ui.fetch_retries, &def.ui.fetch_retries)),
-            "cpu_warn_pct": eff(&self_s.raw.ui.cpu_warn_pct, src_of(&self_s.raw.ui.cpu_warn_pct, &def.ui.cpu_warn_pct)),
-            "mem_warn_pct": eff(&self_s.raw.ui.mem_warn_pct, src_of(&self_s.raw.ui.mem_warn_pct, &def.ui.mem_warn_pct)),
-            "temp_err_c": eff(&self_s.raw.ui.temp_err_c, src_of(&self_s.raw.ui.temp_err_c, &def.ui.temp_err_c)),
-            "temp_warn_c": eff(&self_s.raw.ui.temp_warn_c, src_of(&self_s.raw.ui.temp_warn_c, &def.ui.temp_warn_c)),
-            "smart_temp_err_c": eff(&self_s.raw.ui.smart_temp_err_c, src_of(&self_s.raw.ui.smart_temp_err_c, &def.ui.smart_temp_err_c)),
-            "smart_wear_err_pct": eff(&self_s.raw.ui.smart_wear_err_pct, src_of(&self_s.raw.ui.smart_wear_err_pct, &def.ui.smart_wear_err_pct)),
+            "poll_ms": eff(self_s.raw.ui.poll_ms, src_of(&self_s.raw.ui.poll_ms, &def.ui.poll_ms)),
+            "tray_poll_ms": eff(self_s.raw.ui.tray_poll_ms, src_of(&self_s.raw.ui.tray_poll_ms, &def.ui.tray_poll_ms)),
+            "phone_poll_ms": eff(self_s.raw.ui.phone_poll_ms, src_of(&self_s.raw.ui.phone_poll_ms, &def.ui.phone_poll_ms)),
+            "embed_timeout_ms": eff(self_s.raw.ui.embed_timeout_ms, src_of(&self_s.raw.ui.embed_timeout_ms, &def.ui.embed_timeout_ms)),
+            "boot_poll_ms": eff(self_s.raw.ui.boot_poll_ms, src_of(&self_s.raw.ui.boot_poll_ms, &def.ui.boot_poll_ms)),
+            "boot_timeout_ms": eff(self_s.raw.ui.boot_timeout_ms, src_of(&self_s.raw.ui.boot_timeout_ms, &def.ui.boot_timeout_ms)),
+            "embed_probe_ms": eff(self_s.raw.ui.embed_probe_ms, src_of(&self_s.raw.ui.embed_probe_ms, &def.ui.embed_probe_ms)),
+            "fetch_retries": eff(self_s.raw.ui.fetch_retries, src_of(&self_s.raw.ui.fetch_retries, &def.ui.fetch_retries)),
+            "cpu_warn_pct": eff(self_s.raw.ui.cpu_warn_pct, src_of(&self_s.raw.ui.cpu_warn_pct, &def.ui.cpu_warn_pct)),
+            "mem_warn_pct": eff(self_s.raw.ui.mem_warn_pct, src_of(&self_s.raw.ui.mem_warn_pct, &def.ui.mem_warn_pct)),
+            "temp_err_c": eff(self_s.raw.ui.temp_err_c, src_of(&self_s.raw.ui.temp_err_c, &def.ui.temp_err_c)),
+            "temp_warn_c": eff(self_s.raw.ui.temp_warn_c, src_of(&self_s.raw.ui.temp_warn_c, &def.ui.temp_warn_c)),
+            "smart_temp_err_c": eff(self_s.raw.ui.smart_temp_err_c, src_of(&self_s.raw.ui.smart_temp_err_c, &def.ui.smart_temp_err_c)),
+            "smart_wear_err_pct": eff(self_s.raw.ui.smart_wear_err_pct, src_of(&self_s.raw.ui.smart_wear_err_pct, &def.ui.smart_wear_err_pct)),
             "ws_reconnect_ms": eff(&self_s.raw.ui.ws_reconnect_ms, src_of(&self_s.raw.ui.ws_reconnect_ms, &def.ui.ws_reconnect_ms)),
         },
         "launcher": {
-            "wait_secs": eff(&self_s.raw.launcher.wait_secs, src_of(&self_s.raw.launcher.wait_secs, &def.launcher.wait_secs)),
-            "poll_interval_secs": eff(&self_s.raw.launcher.poll_interval_secs, src_of(&self_s.raw.launcher.poll_interval_secs, &def.launcher.poll_interval_secs)),
-            "connect_timeout_ms": eff(&self_s.raw.launcher.connect_timeout_ms, src_of(&self_s.raw.launcher.connect_timeout_ms, &def.launcher.connect_timeout_ms)),
+            "wait_secs": eff(self_s.raw.launcher.wait_secs, src_of(&self_s.raw.launcher.wait_secs, &def.launcher.wait_secs)),
+            "poll_interval_secs": eff(self_s.raw.launcher.poll_interval_secs, src_of(&self_s.raw.launcher.poll_interval_secs, &def.launcher.poll_interval_secs)),
+            "connect_timeout_ms": eff(self_s.raw.launcher.connect_timeout_ms, src_of(&self_s.raw.launcher.connect_timeout_ms, &def.launcher.connect_timeout_ms)),
         },
         "flags": {
             "feature": {
-                "auto_retry": eff(&self_s.raw.flags.feature.auto_retry, src_of(&self_s.raw.flags.feature.auto_retry, &def.flags.feature.auto_retry)),
-                "usb_eject": eff(&self_s.raw.flags.feature.usb_eject, src_of(&self_s.raw.flags.feature.usb_eject, &def.flags.feature.usb_eject)),
+                "auto_retry": eff(self_s.raw.flags.feature.auto_retry, src_of(&self_s.raw.flags.feature.auto_retry, &def.flags.feature.auto_retry)),
+                "usb_eject": eff(self_s.raw.flags.feature.usb_eject, src_of(&self_s.raw.flags.feature.usb_eject, &def.flags.feature.usb_eject)),
             }
         },
         "tray": {
-            "balloon_ms": eff(&self_s.raw.tray.balloon_ms, src_of(&self_s.raw.tray.balloon_ms, &def.tray.balloon_ms)),
+            "balloon_ms": eff(self_s.raw.tray.balloon_ms, src_of(&self_s.raw.tray.balloon_ms, &def.tray.balloon_ms)),
         },
         "control": {
             "enabled": eff(self_s.control_enabled(), ctl_src_bool("FENGPAGE_CONTROL_ENABLED", self_s.raw.control.enabled, def.control.enabled)),
@@ -1350,7 +1313,7 @@ pub fn effective_json(self_s: &Settings) -> Value {
         // actually manages right now.
         "smb": {
             "enabled": eff(self_s.smb_enabled(), src_of(&self_s.raw.smb.enabled, &def.smb.enabled)),
-            "guest_access": eff(&live_smb.guest_access, src_of(&live_smb.guest_access, &def.smb.guest_access)),
+            "guest_access": eff(live_smb.guest_access, src_of(&live_smb.guest_access, &def.smb.guest_access)),
             "default_grant": eff(&live_smb.default_grant, src_of(&live_smb.default_grant, &def.smb.default_grant)),
             "shares": live_smb.shares.iter().map(|s| {
                 json!({

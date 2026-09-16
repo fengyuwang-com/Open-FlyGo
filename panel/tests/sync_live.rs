@@ -15,10 +15,19 @@
 //
 // All code comments are pure ASCII.
 
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/settings.rs"]
 mod settings;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/config.rs"]
 mod config;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/api/sync.rs"]
 mod sync;
 
@@ -47,7 +56,7 @@ async fn live_overview_http() {
     config::init(); // real settings + legacy syncthing home resolution
 
     let state = Arc::new(sync::SyncState {
-        tray: Box::new(|| sync::TraySnapshot::default()), // stub: no daemon here
+        tray: Box::new(sync::TraySnapshot::default), // stub: no daemon here
         links_path: dir.join("data").join("sync-links.json"),
     });
     let app = Router::new()

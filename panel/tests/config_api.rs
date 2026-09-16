@@ -9,10 +9,19 @@
 //
 // All code comments are pure ASCII.
 
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/settings.rs"]
 mod settings;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/log.rs"]
 mod log;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/api/cfg.rs"]
 mod cfg;
 

@@ -32,7 +32,6 @@
 
 use std::collections::HashSet;
 use std::os::windows::ffi::OsStrExt;
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
@@ -48,7 +47,7 @@ use windows::Win32::Security::SECURITY_ATTRIBUTES;
 use windows::Win32::Storage::FileSystem::ReadFile;
 use windows::Win32::System::Pipes::CreatePipe;
 use windows::Win32::System::Threading::{
-    CreateProcessW, GetExitCodeProcess, TerminateProcess, WaitForSingleObject, CREATE_NO_WINDOW,
+    CreateProcessW, GetExitCodeProcess, WaitForSingleObject, CREATE_NO_WINDOW,
     PROCESS_INFORMATION, STARTUPINFOW, STARTF_USESHOWWINDOW, STARTF_USESTDHANDLES,
 };
 use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
@@ -170,7 +169,7 @@ fn ps_with_timeout(script: &str, timeout: Duration) -> (bool, String) {
         "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand {}",
         base64_utf16le(&exp)
     );
-    let mut h = match spawn_ps_hidden(&cmd) {
+    let h = match spawn_ps_hidden(&cmd) {
         Ok(h) => h,
         Err(e) => return (false, format!("spawn failed: {e}")),
     };
@@ -221,7 +220,7 @@ fn base64_utf16le(s: &str) -> String {
         bytes.push((w & 0xFF) as u8);
         bytes.push((w >> 8) as u8);
     }
-    let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = *chunk.get(1).unwrap_or(&0) as u32;
@@ -391,6 +390,73 @@ fn share_path(name: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Which of `names` currently exist as SMB shares. ONE PowerShell cold start
+/// answers for the whole set, replacing one probe per name (the boot baseline
+/// used to pay one ~1.5 s cold start per name just asking "does it exist?").
+/// Names are machine-generated (single letters, "C$", "ADMIN$"); anything
+/// empty or containing a quote is skipped, never passed to the script.
+/// Returns `None` when the batched probe failed or came back truncated: the
+/// set would silently claim "nothing exists", which makes `create_all` pass
+/// `Some(false)` hints and mislabel healthy existing shares as failed. Callers
+/// must fall back to per-name probes on `None`.
+fn shares_existing(names: &[&str]) -> Option<HashSet<String>> {
+    let clean: Vec<&str> = names
+        .iter()
+        .map(|n| n.trim())
+        .filter(|n| !n.is_empty() && !n.contains('\''))
+        .collect();
+    if clean.is_empty() {
+        return Some(HashSet::new());
+    }
+    // Each name prints "1" when the share exists, "0" otherwise, in input
+    // order (Write-Output per fragment).
+    let frags: Vec<String> = clean
+        .iter()
+        .map(|n| {
+            format!(
+                "if (Get-SmbShare -Name '{n}' -ErrorAction SilentlyContinue) {{ '1' }} else {{ '0' }}"
+            )
+        })
+        .collect();
+    let (ok, out) = ps(&frags.join("; "));
+    if !ok {
+        log_warn!("smb.shares_existing", "batch probe failed; callers fall back");
+        return None;
+    }
+    let found = parse_existing_answers(&clean, &out);
+    if found.len() < clean.len() {
+        // Output shorter than input: answers are only partially trustworthy,
+        // so refuse the set entirely rather than report partial truth.
+        log_warn!(
+            "smb.shares_existing",
+            "batch probe output short: {}/{} answers; callers fall back",
+            found.len(),
+            clean.len()
+        );
+        return None;
+    }
+    Some(found)
+}
+
+/// Pure pairing of batched "0"/"1" answer lines with the probed names, in
+/// order. Only exact "0"/"1" lines count (stray output cannot desync the
+/// pairing); names without an answer are simply absent from the result.
+/// Pure and unit-testable (no PS calls).
+fn parse_existing_answers(names: &[&str], out: &str) -> HashSet<String> {
+    let mut it = out.lines().map(str::trim).filter(|l| *l == "0" || *l == "1");
+    let mut found = HashSet::new();
+    for n in names {
+        match it.next() {
+            Some("1") => {
+                found.insert((*n).to_string());
+            }
+            Some(_) => {}
+            None => break,
+        }
+    }
+    found
 }
 
 fn drive_root_online(path: &str) -> bool {
@@ -703,23 +769,30 @@ pub fn list_drives() -> Vec<DriveInfo> {
 /// external letters must NOT be listed: on machines without that letter the
 /// entry is dead weight, and with it present the OS share already exists.
 fn ensure_admin_shares() {
-    for (name, path) in [("ADMIN$", "C:\\WINDOWS"), ("C$", "C:\\")] {
-        // Skip a share whose backing drive is not mounted (e.g. E$ with no E:).
-        if !drive_root_online(path) {
+    let t0 = Instant::now();
+    let candidates: [(&str, &str); 2] = [("ADMIN$", "C:\\WINDOWS"), ("C$", "C:\\")];
+    let online: Vec<&str> = candidates
+        .iter()
+        .filter(|(_, path)| drive_root_online(path))
+        .map(|(name, _)| *name)
+        .collect();
+    // One cold start answers existence for ALL candidates (was one per name).
+    let known = shares_existing(&online);
+    let mut created = 0usize;
+    for (name, path) in candidates {
+        if !online.contains(&name)
+            || known.as_ref().is_some_and(|s| s.contains(name))
+            || (known.is_none() && share_exists(name))
+        {
             continue;
         }
         let name_q = name.replace('\'', "''");
-        let exists = ps_output_yes(&format!(
-            r#"if (Get-SmbShare -Name '{name_q}' -ErrorAction SilentlyContinue) {{ 'YES' }} else {{ 'NO' }}"#
-        ));
-        if exists {
-            continue;
-        }
         let path_q = path.replace('\'', "''");
         let (ok, out) = ps(&format!(
             "New-SmbShare -Name '{name_q}' -Path '{path_q}' -FullAccess Everyone | Out-Null; if ($?) {{ 'OK' }} else {{ 'ERR' }}"
         ));
         if ok {
+            created += 1;
             log_info!("smb.ensure_admin_shares", "{name} created ({path})");
         } else {
             log_warn!(
@@ -729,12 +802,46 @@ fn ensure_admin_shares() {
             );
         }
     }
+    log_info!(
+        "smb.boot",
+        "step ensure_admin_shares took {}ms ({} checked, {created} created)",
+        t0.elapsed().as_millis(),
+        online.len()
+    );
+}
+
+/// Policy for share names: quotes are rejected outright (empty names too).
+/// Single quotes need PowerShell escaping and the stale-share reconcile pass
+/// refuses to touch such names; double quotes break single-quoted -Name
+/// usage. One rule for every path (create / reconcile / remove) keeps the
+/// handling consistent - validation here, not per-site escaping.
+pub fn valid_share_name(name: &str) -> bool {
+    !name.trim().is_empty() && !name.contains('\'') && !name.contains('"')
 }
 
 /// Create one share (idempotent). Also grants Everyone:Read on the root when
 /// guest access is on so anonymous listings pass the NTFS layer. Returns the
 /// per-share outcome.
 fn create_one(name: &str, path: &str, grant: &str) -> ManagedShare {
+    create_one_h(name, path, grant, None)
+}
+
+/// exists_hint: when Some, the caller already learned the share's existence
+/// from a batched boot probe (one cold start for the whole configured set);
+/// None probes on demand (single-drive paths like set_drive).
+fn create_one_h(name: &str, path: &str, grant: &str, exists_hint: Option<bool>) -> ManagedShare {
+    if !valid_share_name(name) {
+        log_error!(
+            "smb.create_one",
+            "E {name}: share name rejected (quote characters are not allowed)"
+        );
+        return ManagedShare {
+            name: name.to_string(),
+            path: format!("{}\\", path.trim()),
+            state: "failed",
+            detail: "share name contains quote characters; not allowed".into(),
+        };
+    }
     let mut path = path.trim().to_string();
     if !path.ends_with('\\') {
         path.push('\\');
@@ -750,7 +857,8 @@ fn create_one(name: &str, path: &str, grant: &str) -> ManagedShare {
             detail: "盘未挂载，插入后可在面板重挂".into(),
         };
     }
-    if share_exists(name) {
+    let exists = exists_hint.unwrap_or_else(|| share_exists(name));
+    if exists {
         log_info!("smb.create_one", "{name} already shared ({path})");
         return ManagedShare {
             name: name.to_string(),
@@ -835,15 +943,12 @@ fn remove_many(managed: &[(String, String)]) -> usize {
     if ok {
         for line in out.lines() {
             let t = line.trim();
-            if t.starts_with("OK:") {
+            if let Some(n) = t.strip_prefix("OK:") {
                 removed += 1;
-                let n = &t[3..];
                 log_info!("smb.remove_many", "{n} removed");
-            } else if t.starts_with("ERR:") {
-                let n = &t[4..];
+            } else if let Some(n) = t.strip_prefix("ERR:") {
                 log_error!("smb.remove_many", "E {n} remove failed");
-            } else if t.starts_with("SKIP:") {
-                let n = &t[5..];
+            } else if let Some(n) = t.strip_prefix("SKIP:") {
                 log_warn!("smb.remove_many", "{n} skip: not matching managed path");
             }
         }
@@ -869,23 +974,44 @@ pub fn create_all() -> Vec<ManagedShare> {
         let out = runtime().lock().unwrap().clone();
         return out;
     }
+    let t0 = Instant::now();
     let base = settings.smb_default_grant().to_string();
+    let items: Vec<(String, String, String)> = settings
+        .smb_shares()
+        .iter()
+        .map(|s| {
+            let name = s.name.trim().to_string();
+            let grant = if s.grant.trim().is_empty() {
+                base.clone()
+            } else {
+                s.grant.clone()
+            };
+            (name, s.path.clone(), grant)
+        })
+        .collect();
+    // One batched existence probe for the whole configured set (was one
+    // cold start per share just to learn "already" vs "create"). On probe
+    // failure the hint stays None so each create_one_h re-probes by name.
+    let names: Vec<&str> = items.iter().map(|(n, _, _)| n.as_str()).collect();
+    let existing = shares_existing(&names);
     let mut results = Vec::new();
-    for s in settings.smb_shares() {
-        let name = s.name.trim().to_string();
-        let grant = if s.grant.trim().is_empty() {
-            base.clone()
-        } else {
-            s.grant.clone()
-        };
-        results.push(create_one(&name, &s.path, &grant));
+    for (name, path, grant) in &items {
+        results.push(create_one_h(
+            name,
+            path,
+            grant,
+            existing
+                .as_ref()
+                .map(|s| s.contains(name.as_str())),
+        ));
     }
     *runtime().lock().unwrap() = results.clone();
     let created = results.iter().filter(|r| r.state == "created").count();
     let failed = results.iter().filter(|r| r.state == "failed").count();
     log_info!(
         "smb.create_all",
-        "done: {} created / {} already / {} skipped / {} failed of {} configured",
+        "done in {}ms: {} created / {} already / {} skipped / {} failed of {} configured",
+        t0.elapsed().as_millis(),
         created,
         results.iter().filter(|r| r.state == "already").count(),
         results.iter().filter(|r| r.state == "skipped-offline").count(),
@@ -1157,35 +1283,51 @@ fn refresh_drive(letter: String) -> Result<DriveInfo, String> {
 /// Only configured letters are touched - Windows admin shares and anything the
 /// user created outside the panel are never removed.
 fn reconcile_stale_shares() {
+    let t0 = Instant::now();
     let settings = crate::settings::get();
-    for s in settings.smb_shares() {
-        let name = s.name.trim();
-        if name.is_empty() {
-            continue;
-        }
-        let name_q = name.replace('\'', "''");
-        let exists = ps_output_yes(&format!(
-            r#"if (Get-SmbShare -Name '{name_q}' -ErrorAction SilentlyContinue) {{ 'YES' }} else {{ 'NO' }}"#
-        ));
-        if exists {
-            log_info!(
-                "smb.reconcile_stale_shares",
-                "stale {name} found (left by a previous run); removing"
-            );
-            let (ok, out) = ps(&format!(
-                "Remove-SmbShare -Name '{name_q}' -Force -ErrorAction SilentlyContinue; if ($?) {{ 'OK' }} else {{ 'ERR' }}"
-            ));
-            if ok {
-                log_info!("smb.reconcile_stale_shares", "{name} stale share removed");
-            } else {
-                log_error!(
-                    "smb.reconcile_stale_shares",
-                    "E {name} stale remove fail: {}",
-                    if out.trim().is_empty() { "no output".into() } else { out.trim().to_string() }
-                );
-            }
+    let shares_cfg = settings.smb_shares();
+    let names: Vec<&str> = shares_cfg
+        .iter()
+        .map(|s| s.name.trim())
+        // Same quote policy as create_one_h (valid_share_name): a name we
+        // would refuse to create is also a name we refuse to probe/remove.
+        .filter(|n| valid_share_name(n))
+        .collect();
+    if names.is_empty() {
+        return;
+    }
+    // One cold start probes AND removes every stale share (was two calls per
+    // name: one Get-SmbShare probe + one Remove when found). Semantics are
+    // unchanged: only configured letter-shares are touched, admin shares and
+    // user-created shares outside [smb].shares are never removed.
+    let frags: Vec<String> = names
+        .iter()
+        .map(|n| {
+            format!(
+                "$s = Get-SmbShare -Name '{n}' -ErrorAction SilentlyContinue; if ($s) {{ Remove-SmbShare -Name '{n}' -Force -ErrorAction SilentlyContinue; if ($?) {{ 'OK:{n}' }} else {{ 'ERR:{n}' }} }}"
+            )
+        })
+        .collect();
+    let (ok, out) = ps(&frags.join("; "));
+    if !ok && out.trim().is_empty() {
+        log_warn!("smb.reconcile_stale_shares", "batch reconcile failed (ps ok=false)");
+    }
+    let mut removed = 0usize;
+    for line in out.lines() {
+        let t = line.trim();
+        if let Some(n) = t.strip_prefix("OK:") {
+            removed += 1;
+            log_info!("smb.reconcile_stale_shares", "stale {n} found (left by a previous run); removed");
+        } else if let Some(n) = t.strip_prefix("ERR:") {
+            log_error!("smb.reconcile_stale_shares", "E {n} stale remove fail");
         }
     }
+    log_info!(
+        "smb.boot",
+        "step reconcile_stale_shares took {}ms ({} checked, {removed} removed)",
+        t0.elapsed().as_millis(),
+        names.len()
+    );
 }
 
 /// Run the whole "open the app" step: leftover-share reconciliation + guest
@@ -1201,6 +1343,22 @@ pub fn open_app() {
         // set is always freshly created (not inherited stale shares).
         reconcile_stale_shares();
     }
+    // create_all runs BEFORE the guest baseline is spawned. ALL PowerShell
+    // invocations serialize on the process-wide PS lock inside
+    // ps_with_timeout (the cross-inherited-pipe fix), so a baseline spawned
+    // first would hold that lock for its whole secedit run (seconds up to
+    // the 25 s cap) and delay share creation by exactly that long. The
+    // baseline is machine-level policy and fully independent of share
+    // creation, so it goes last and stays async / non-blocking.
+    let r = create_all();
+    let created = r.iter().filter(|s| s.state == "created").count();
+    let failed = r.iter().filter(|s| s.state == "failed").count();
+    log_info!(
+        "smb.open_app",
+        "boot share setup done: {created} created / {failed} failed / {} managed in {}ms",
+        r.len(),
+        t0.elapsed().as_millis()
+    );
     if settings.smb_enabled() && settings.smb_guest_access() && !settings.smb_shares().is_empty() {
         // Apply the guest/anonymous baseline on a detached background thread.
         // It is slow (secedit export/configure on the SMB policy DB can take
@@ -1209,26 +1367,20 @@ pub fn open_app() {
         // appear right away and the baseline settles in shortly after. A failure
         // here only means anonymous browse may need credentials; the panel still
         // works and logs the outcome.
-        thread::spawn(|| {
+        let spawned_at_ms = t0.elapsed().as_millis();
+        thread::spawn(move || {
+            let g0 = Instant::now();
             let (ok, msg) = apply_guest(true);
             log_info!(
                 "smb.open_app",
-                "guest/anon baseline (async): {} ({})",
+                "guest/anon baseline (async, spawned {}ms into boot): {} ({}) in {}ms",
+                spawned_at_ms,
                 if ok { "applied" } else { "failed" },
-                if msg.is_empty() { "ok".to_string() } else { msg.trim().to_string() }
+                if msg.is_empty() { "ok".to_string() } else { msg.trim().to_string() },
+                g0.elapsed().as_millis()
             );
         });
     }
-    let r = create_all();
-    let created = r.iter().filter(|s| s.state == "created").count();
-    let failed = r.iter().filter(|s| s.state == "failed").count();
-    log_info!(
-        "smb.open_app",
-        "boot share setup done: {created} created / {} failed / {} managed in {}ms",
-        failed,
-        r.len(),
-        t0.elapsed().as_millis()
-    );
 }
 
 /// Run the whole "stop the app" step: remove what we manage. The cleanup is
@@ -1266,6 +1418,23 @@ pub fn close_app() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn valid_share_name_rejects_quotes_and_empty() {
+        // Normal names pass.
+        assert!(valid_share_name("FlyGo-C"));
+        assert!(valid_share_name("Data Drive"));
+        assert!(valid_share_name("c"));
+        // Quote policy: single AND double quotes are refused, same rule on
+        // the create and the reconcile path.
+        assert!(!valid_share_name("Fly'Go"));
+        assert!(!valid_share_name("Fly\"Go"));
+        assert!(!valid_share_name("'"));
+        assert!(!valid_share_name("\""));
+        // Empty / whitespace-only names are refused too.
+        assert!(!valid_share_name(""));
+        assert!(!valid_share_name("   "));
+    }
 
     #[test]
     fn access_flags_parses_grant_strings() {
@@ -1315,6 +1484,22 @@ mod tests {
         assert_eq!(n.kind, "network");
         assert_eq!(n.fs, "");
         assert_eq!(n.label, "");
+    }
+
+    #[test]
+    fn parse_drive_line_pure_tolerates_bad_numbers_and_lowercase() {
+        // Unknown DriveType falls back to "other" instead of panicking.
+        let o = parse_drive_line_pure("Q:|NTFS|5|10.0|100.0|RAM-ish").expect("dt=5");
+        assert_eq!(o.kind, "other");
+        // Non-numeric sizes degrade to 0.0 (never None: the drive still exists).
+        let n = parse_drive_line_pure("D:|NTFS|3|abc|def|Data").expect("bad numbers");
+        assert_eq!(n.kind, "fixed");
+        assert_eq!(n.size_gb, 0.0);
+        assert_eq!(n.free_gb, 0.0);
+        // Lowercase letters with a trailing colon normalize to the upper letter.
+        let l = parse_drive_line_pure("e:|FAT32|2|1.0|8.0|").expect("lowercase");
+        assert_eq!(l.letter, "E");
+        assert_eq!(l.path, "E:\\");
     }
 
     #[test]
@@ -1462,5 +1647,42 @@ mod tests {
         let configured: HashSet<String> = ["C".to_string()].into_iter().collect();
         let denied: HashSet<String> = HashSet::new();
         assert!(pending_auto_share(&present, &configured, &denied).is_empty());
+    }
+
+    #[test]
+    fn parse_existing_answers_pairs_in_order() {
+        let names = vec!["C", "E", "ADMIN$"];
+        // Exactly the 0/1 lines pair with the names; order is the contract.
+        let found = parse_existing_answers(&names, "0\n1\n0\n");
+        assert!(!found.contains("C"));
+        assert!(found.contains("E"));
+        assert!(!found.contains("ADMIN$"));
+    }
+
+    #[test]
+    fn parse_existing_answers_ignores_stray_output() {
+        let names = vec!["C", "E"];
+        // A rogue warning line between answers must not shift the pairing.
+        let found = parse_existing_answers(&names, "WARNING: blah\n0\nnoise\n1\n");
+        assert!(!found.contains("C"));
+        assert!(found.contains("E"));
+    }
+
+    #[test]
+    fn parse_existing_answers_tolerates_missing_answers() {
+        let names = vec!["C", "E", "D"];
+        // Only two answers arrived (truncated run): C seen absent, E seen
+        // present, D simply unknown (absent from the set).
+        let found = parse_existing_answers(&names, "0\n1\n");
+        assert_eq!(found, ["E".to_string()].into_iter().collect());
+        // No answers at all -> nothing claimed to exist.
+        assert!(parse_existing_answers(&names, "").is_empty());
+    }
+
+    #[test]
+    fn shares_existing_filters_bad_names_without_touching_ps() {
+        // Quote-bearing/empty names are dropped; an all-empty list must not
+        // spawn PowerShell at all (returns before any ps() call).
+        assert_eq!(shares_existing(&["", "a'b"]), Some(HashSet::new()));
     }
 }
