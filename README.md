@@ -36,7 +36,23 @@
 
 产品代码、架构与设计文档、产品规划、商业策略文档（`商业计划书.md` 等）完整保留。`docs/flygo-app-plan.md` 中一处私有组网地址已替换为通用占位符。
 
-## 快速上手（从源码构建）
+脱敏是**逐文件、按已提交清单**做的系统性替换（不含私有主机名 / 内网网段 / 本文档提及的各类内部标识），且 Release 里的预编译产物就是**由这份脱敏后的源码构建**的——源码干净、二进制也干净，两边一致。
+
+## 下载（预编译版）
+
+不想装 Rust 工具链，就从 [Releases](../../releases/latest) 直接下：
+
+| 文件 | 用途 |
+|---|---|
+| `FlyGo-win-Setup.exe` | 安装版（推荐）：装到用户目录，自带更新器，以后可增量升级 |
+| `FlyGo-win-Portable.zip` | 免安装版：解压即用 |
+| `FlyGo-<版本>-full.nupkg` | 完整更新包，供上面两者自动更新，一般不需要手动下载 |
+
+安装包主体只有 `flygo.exe`（外加 Velopack 的更新器），不写系统服务、不改系统设置；卸载＝退出托盘后删掉目录即可，数据都留在自己指定的文件夹里。
+
+**关于杀软提示**：安装包未做代码签名（个人开源项目），首次运行可能被 SmartScreen 拦成「未知发布者」，或被 Defender 报成可疑文件。这是**无签名 exe 的通用现象**，不代表文件有问题——源码就在本仓库，可自行核对或编译。详见 [`docs/defender-false-positive.md`](docs/defender-false-positive.md)。
+
+## 从源码构建
 
 依赖：Windows 10/11 + Rust 工具链（stable）。
 
@@ -58,7 +74,12 @@ cargo build --release
 ```
 
 细节见 `control-plane/README.md`、`control-plane/API-CONTRACT.md`、`docs/project-structure.md`。
-当前版本：`2026.09.07-0130`（见根目录 `Version` 文件，格式 `YYYY.MM.DD-HHMM`）。版本发布见 [Releases](../../releases/latest)（当前请从源码构建，预编译产物将以后续重编译版本提供）。
+
+当前版本：`2026.09.10-2037`（见根目录 `Version` 文件，格式 `YYYY.MM.DD-HHMM`）。Release 中的预编译产物即由本仓库这份源码构建；如需复现发布版，建议在构建时抹掉构建机路径（Rust 会把 panic 位置等绝对路径写进二进制）：
+
+```bash
+RUSTFLAGS="--remap-path-prefix=$PWD=C:\\src" cargo build --release
+```
 
 ## 文档导航
 
