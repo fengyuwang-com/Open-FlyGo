@@ -30,7 +30,7 @@
 **为什么这个场景成立**（用户已实测）：
 - PlainApp 最新版在安卓 16 上工作正常，"发射/Web 服务器"功能可用；
 - 手机 1TB 容量远超电脑/节点可用空间——手机就是最大的"冷存储 + 随身存储"；
-- Tailscale 已铺好（节点 100.123.90.16），手机装 Tailscale App 即入网，地址恒定、加密、跨网络可达（在家走局域网，出门走 DERP/中继）。
+- Tailscale 已铺好（节点 100.101.102.103），手机装 Tailscale App 即入网，地址恒定、加密、跨网络可达（在家走局域网，出门走 DERP/中继）。
 
 **手机 vs 节点的角色边界**（沿用技术计划"手机不当真节点"结论）：
 - 手机**不**承担节点职责（无 Docker/转码/7×24 服务承诺）；
@@ -41,7 +41,7 @@
 
 ## 2. PlainApp 能力调研结论
 
-> 调研基于仓库 `plainhub/plain-app`（作者 ismartcoding，AGPL-3.0，Kotlin，6519★，README 已核实）+ 源码克隆 `C:\Users\<user>\AppData\Local\Temp\plainapp-research`。README 层面事实已核实，源码层面（端口/绑定/API）以子代理源码调研为准，未覆盖处标注"待实测"。
+> 调研基于仓库 `plainhub/plain-app`（作者 ismartcoding，AGPL-3.0，Kotlin，6519★，README 已核实）+ 源码克隆 `~/AppData/Local/Temp/plainapp-research`。README 层面事实已核实，源码层面（端口/绑定/API）以子代理源码调研为准，未覆盖处标注"待实测"。
 
 ### 2.1 能力清单（Web 服务功能提供什么）
 

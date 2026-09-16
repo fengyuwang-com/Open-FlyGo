@@ -8,12 +8,30 @@
 //
 // All code comments are pure ASCII.
 
+// Hidden-spawn helper shared with the panel crate (winproc) so the
+// included handler modules can resolve crate::winproc.
+#[allow(dead_code)]
+#[path = "../src/winproc.rs"]
+mod winproc;
+
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/settings.rs"]
 mod settings;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/config.rs"]
 mod config;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/api/control.rs"]
 mod control;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/api/upload.rs"]
 mod upload;
 // stats.rs resolves its sibling modules as crate::api::stats (same layout as
@@ -21,12 +39,30 @@ mod upload;
 // handler; provide both here.
 mod api {
     // Relative to this test module's directory (tests/api/).
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
     #[path = "../../src/api/stats.rs"]
     pub mod stats;
 }
 
 #[allow(dead_code)]
 fn request_shutdown() {}
+
+// control.rs (P1-4 heartbeat loop) also resolves these in the crate root of
+// the main binary; this test binary has no main.rs, so provide the same
+// contract here (no logger file, never shutting down).
+#[allow(dead_code)]
+fn shutdown_requested() -> bool {
+    false
+}
+
+pub mod log {
+    #[allow(dead_code)]
+    pub fn log(level: &str, tag: &str, msg: &str) {
+        eprintln!("[{level}] {tag}: {msg}");
+    }
+}
 
 use api::stats;
 
@@ -91,7 +127,7 @@ fn control_plane_client_over_http() {
                     let pc = pc.clone();
                     async move {
                         let hw = body.get("hardware_id").and_then(|h| h.as_str()).unwrap_or("").to_string();
-                        let code = pc.lock().unwrap().clone().unwrap_or_else(|| "ABCD-EFGH".to_string());
+                        let code = pc.lock().unwrap().clone().unwrap_or_else(|| "ABCD2345".to_string());
                         *pc.lock().unwrap() = Some(code.clone());
                         *ph.lock().unwrap() = Some(hw.clone());
                         Json(json!({
@@ -122,7 +158,7 @@ fn control_plane_client_over_http() {
                 post(|Json(body): Json<Value>| async move {
                     let code = body.get("activation_code").and_then(|c| c.as_str()).unwrap_or("");
                     let hw = body.get("hardware_id").and_then(|h| h.as_str()).unwrap_or("");
-                    if code != "ABCD-EFGH" {
+                    if code != "ABCD2345" {
                         return (axum::http::StatusCode::BAD_REQUEST, Json(json!({"ok": false, "message": "invalid activation code"})));
                     }
                     let now = chrono_now();
@@ -250,18 +286,18 @@ fn control_plane_client_over_http() {
         // 3) register -> activation code from the mock plane, persisted
         let r = post_json("/api/control/register", "{}");
         assert_eq!(r["ok"], true);
-        assert_eq!(r["activation_code"], "ABCD-EFGH");
+        assert_eq!(r["activation_code"], "ABCD2345");
         assert_eq!(r["cached"], false);
         assert!(r["hardware_id"].as_str().unwrap().starts_with("PANEL-"));
         let st = get_json("/api/control/status");
         assert_eq!(st["registered"], true);
-        assert_eq!(st["activation_code"], "ABCD-EFGH");
+        assert_eq!(st["activation_code"], "ABCD2345");
         assert_eq!(st["device_name"], "flygo-panel");
 
         // 4) register again -> idempotent, served from the local cache
         let r = post_json("/api/control/register", "{}");
         assert_eq!(r["cached"], true);
-        assert_eq!(r["activation_code"], "ABCD-EFGH");
+        assert_eq!(r["activation_code"], "ABCD2345");
 
         // 5) activate with a wrong code -> plane 400 surfaces its message
         let r = post_json("/api/control/activate", r#"{"code": "ZZZZ-ZZZZ"}"#);
@@ -269,7 +305,7 @@ fn control_plane_client_over_http() {
         assert!(r["message"].as_str().unwrap().contains("invalid activation code"));
 
         // 6) activate with the right code (lowercase is uppercased client-side)
-        let r = post_json("/api/control/activate", r#"{"code": "abcd-efgh"}"#);
+        let r = post_json("/api/control/activate", r#"{"code": "abcd-2345"}"#);
         assert_eq!(r["ok"], true);
         assert_eq!(r["token"], "mock-jwt-token");
         assert_eq!(r["subscription"]["state"], "trial");
@@ -309,7 +345,7 @@ fn control_plane_client_over_http() {
         let saved = PathBuf::from(v["path"].as_str().unwrap());
         assert_eq!(std::fs::read_to_string(&saved).unwrap(), "hello world");
         assert_eq!(v["size"], 11);
-        assert!(saved.starts_with(&dir.join("data").join("uploads")), "saved under uploads dir");
+        assert!(saved.starts_with(dir.join("data").join("uploads")), "saved under uploads dir");
         assert!(saved.parent().unwrap().file_name().unwrap().to_string_lossy().len() == 8, "date subdir");
 
         // 10) traversal name is neutralized to its basename, stays inside
@@ -322,7 +358,7 @@ fn control_plane_client_over_http() {
         let v: Value = resp.into_json().unwrap();
         let saved = PathBuf::from(v["path"].as_str().unwrap());
         assert_eq!(saved.file_name().unwrap().to_string_lossy(), "escape.txt");
-        assert!(saved.starts_with(&dir.join("data").join("uploads")), "cannot escape uploads dir");
+        assert!(saved.starts_with(dir.join("data").join("uploads")), "cannot escape uploads dir");
 
         // 11) duplicate name gets a -1 suffix instead of overwriting
         let resp = agent
@@ -357,7 +393,7 @@ fn control_plane_client_over_http() {
         }
         // 13) idempotent activate replay: same code -> cached identity, no
         // second bind round-trip (works offline; never double-binds).
-        let r = post_json("/api/control/activate", r#"{"code": "ABCD-EFGH"}"#);
+        let r = post_json("/api/control/activate", r#"{"code": "ABCD2345"}"#);
         assert_eq!(r["ok"], true);
         assert_eq!(r["cached"], true, "re-activating the same code is served from cache");
         assert_eq!(r["token"], "mock-jwt-token");

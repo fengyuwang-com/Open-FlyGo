@@ -146,7 +146,9 @@ fn timestamp() -> String {
     let days = secs / 86_400;
     // Civil-from-days (Howard Hinnant's algorithm), UTC.
     let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    // `z` is u64 (days since epoch + offset), always positive, so the
+    // signed-input guard of the original algorithm is omitted here.
+    let era = z / 146_097;
     let doe = z - era * 146_097; // [0,146096]
     let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0,399]
     let y = yoe + era * 400;
@@ -163,18 +165,27 @@ fn timestamp() -> String {
 
 /// Convenience macros, each takes (module, format-args) and routes through
 /// `log` with the matching severity. ASCII everywhere.
+// Some compile targets (e.g. the launcher bin) never expand log_warn/log_debug,
+// so rustc flags them unused. Keep the family complete and re-exported; the
+// allow prevents cargo fix from pruning them and breaking other targets.
+#[allow(unused_macros)]
 macro_rules! log_info {
     ($mod:expr, $($arg:tt)*) => { crate::log::log("INFO", $mod, &format!($($arg)*)) };
 }
+#[allow(unused_macros)]
 macro_rules! log_warn {
     ($mod:expr, $($arg:tt)*) => { crate::log::log("WARN", $mod, &format!($($arg)*)) };
 }
+#[allow(unused_macros)]
 macro_rules! log_error {
     ($mod:expr, $($arg:tt)*) => { crate::log::log("ERROR", $mod, &format!($($arg)*)) };
 }
+#[allow(unused_macros)]
 macro_rules! log_debug {
     ($mod:expr, $($arg:tt)*) => { crate::log::log("DEBUG", $mod, &format!($($arg)*)) };
 }
 
 // Re-export so `use crate::log::{log_info, ...}` brings the macros into scope.
+// log_warn/log_debug are used by other modules via this re-export; do not prune.
+#[allow(unused_imports)]
 pub(crate) use {log_debug, log_error, log_info, log_warn};

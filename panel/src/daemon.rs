@@ -54,7 +54,7 @@ fn port_of(name: &str) -> String {
     }
 }
 
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::winproc::CREATE_NO_WINDOW;
 /// Exit code of a live process (GetExitCodeProcess).
 const STILL_ACTIVE: u32 = 259;
 /// Interval between external-drive presence polls (seconds); the mirror-sync
@@ -431,7 +431,7 @@ impl DaemonState {
                 .last_drive_mask
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
-            if last.map_or(true, |m| m != mask) {
+            if last.is_none_or(|m| m != mask) {
                 *last = Some(mask);
                 true
             } else {
@@ -1788,7 +1788,12 @@ fn last_error_is(code: u32) -> bool {
 /// Start the WSL keepalive thread and the boot selfcheck on background
 /// threads, and load the persisted engine target first. Never blocks
 /// startup; a failure here only disables the keepalive until the next run.
+/// P0-1: no-op when a shutdown was already requested, so the late boot task
+/// cannot spawn the keepalive thread while the exit tail is tearing down.
 pub fn start_wsl_keepalive() {
+    if crate::shutdown_requested() {
+        return;
+    }
     crate::api::wsl::init_state();
     std::thread::spawn(crate::api::wsl::keepalive_loop);
     crate::api::wsl::start_selfcheck();
@@ -1927,10 +1932,12 @@ mod vdisp_pin_tests {
 
     #[test]
     fn pin_guard_info_serializes_for_api() {
-        let mut g = GuardInfo::default();
-        g.last_check = Some("2026-08-17 03:00:00".into());
-        g.last_result = "match".into();
-        g.drift_count = 2;
+        let g = GuardInfo {
+            last_check: Some("2026-08-17 03:00:00".into()),
+            last_result: "match".into(),
+            drift_count: 2,
+            ..Default::default()
+        };
         let v = serde_json::to_value(&g).expect("serialize");
         assert_eq!(v["last_check"], "2026-08-17 03:00:00");
         assert_eq!(v["drift_count"], 2u64);

@@ -4,7 +4,7 @@
 // is resolved at startup in this order:
 //   1. FENGPAGE_* environment variable (explicit user override)
 //   2. Install-root-relative default (the exe's own directory layout)
-//   3. Legacy FengNAS-era location (probed with exists(); keeps existing
+//   3. Legacy install root (probed with exists(); keeps existing
 //      deployments working with zero configuration)
 //
 // The install root is auto-detected by walking up from the executable until
@@ -83,6 +83,9 @@ pub struct Config {
     pub native_policy_path: PathBuf,
     /// Operation log directory (<root>/data/logs); log.rs writes flygo.log
     /// here. Derived straight from the install root (CEO-pinned path).
+    /// Kept as part of the frozen path contract even though log.rs currently
+    /// derives the directory itself.
+    #[allow(dead_code)]
     pub logs_dir: PathBuf,
 }
 
@@ -160,7 +163,7 @@ fn env_ok(key: &str) -> Option<String> {
 }
 
 /// Optional path: env override > root-relative (if it exists) > legacy
-/// FengNAS-era location (if it exists). None = component not installed /
+/// Legacy install root (if it exists). None = component not installed /
 /// not configured (callers must surface a clear "not found" message).
 fn optional_path(env_key: &str, root_rel: &str, legacy: &str) -> Option<PathBuf> {
     if let Some(v) = env_ok(env_key) {
@@ -206,19 +209,19 @@ impl Config {
     fn build() -> Config {
         let root = detect_root();
         let webcli_exe =
-            optional_path("FENGPAGE_WEB_CLI_EXE", "bin/flygo-webcli.exe", "C:/FengProj/FlyGo/bin/flygo-webcli.exe");
-        let webcli_dir = optional_path("FENGPAGE_WEB_CLI_DIR", "webcli", "C:/FengProj/FlyGo/webcli");
+            optional_path("FENGPAGE_WEB_CLI_EXE", "bin/flygo-webcli.exe", "C:/FlyGoLegacy/bin/flygo-webcli.exe");
+        let webcli_dir = optional_path("FENGPAGE_WEB_CLI_DIR", "webcli", "C:/FlyGoLegacy/webcli");
         let syncthing_exe = optional_path(
             "FENGPAGE_SYNCTHING_EXE",
             "external/syncthing/syncthing.exe",
-            "C:/FengNAS/syncthing/syncthing.exe",
+            "C:/FlyGoLegacy/syncthing/syncthing.exe",
         );
         let syncthing_dir =
-            optional_path("FENGPAGE_SYNCTHING_DIR", "external/syncthing", "C:/FengNAS/syncthing");
+            optional_path("FENGPAGE_SYNCTHING_DIR", "external/syncthing", "C:/FlyGoLegacy/syncthing");
         let syncthing_home = optional_path(
             "FENGPAGE_SYNCTHING_HOME",
             "external/syncthing/config",
-            "C:/FengNAS/syncthing/config",
+            "C:/FlyGoLegacy/syncthing/config",
         )
         .or_else(|| {
             syncthing_exe
@@ -229,12 +232,12 @@ impl Config {
         let homepage_dir = optional_path(
             "FENGPAGE_HOMEPAGE_DIR",
             "external/homepage-src",
-            "C:/FengNAS/homepage-src",
+            "C:/FlyGoLegacy/homepage-src",
         );
         let homepage_config = optional_path(
             "FENGPAGE_HOMEPAGE_CONFIG_DIR",
             "external/homepage-src/config",
-            "C:/FengNAS/homepage/config",
+            "C:/FlyGoLegacy/homepage/config",
         )
         .or_else(|| homepage_dir.as_ref().map(|d| d.join("config")));
         let homepage_node = env_ok("FENGPAGE_NODE").unwrap_or_else(|| "node".to_string());
@@ -266,47 +269,47 @@ impl Config {
             docker_compose: optional_path(
                 "FENGPAGE_DOCKER_COMPOSE",
                 "docker-compose.yml",
-                "C:/FengNAS/docker-compose.yml",
+                "C:/FlyGoLegacy/docker-compose.yml",
             ),
             docker_ctl: optional_path(
                 "FENGPAGE_DOCKER_CTL",
                 "scripts/docker-ctl.cmd",
-                "C:/FengNAS/scripts/docker-ctl.cmd",
+                "C:/FlyGoLegacy/scripts/docker-ctl.cmd",
             ),
             usb_ctl: optional_path(
                 "FENGPAGE_USB_CTL",
                 "scripts/usb-ctl.ps1",
-                "C:/FengNAS/scripts/usb-ctl.ps1",
+                "C:/FlyGoLegacy/scripts/usb-ctl.ps1",
             ),
             sync_script: optional_path(
                 "FENGPAGE_SYNC_SCRIPT",
                 "scripts/sync-important-files.ps1",
-                "C:/FengNAS/backup/sync-important-files.ps1",
+                "C:/FlyGoLegacy/backup/sync-important-files.ps1",
             ),
             portproxy_script: optional_path(
                 "FENGPAGE_PORTPROXY_SCRIPT",
                 "scripts/apply-portproxy.ps1",
-                "C:/FengNAS/scripts/apply-portproxy.ps1",
+                "C:/FlyGoLegacy/scripts/apply-portproxy.ps1",
             ),
             term_env: target_path(
                 "FENGPAGE_TERM_ENV",
                 "term_token.env",
-                "C:/FengProj/FlyGo/panel/term_token.env",
+                "C:/FlyGoLegacy/panel/term_token.env",
             ),
             autostart_backup: target_path(
                 "FENGPAGE_AUTOSTART_BACKUP",
                 "autostart_backup.json",
-                "C:/FengProj/FlyGo/panel/autostart_backup.json",
+                "C:/FlyGoLegacy/panel/autostart_backup.json",
             ),
             mirror_log: str_or(
                 "FENGPAGE_MIRROR_LOG",
-                "C:/FengNAS/backup/sync-important-files.log",
+                "C:/FlyGoLegacy/backup/sync-important-files.log",
                 "",
             ),
             mirror_src: str_or("FENGPAGE_MIRROR_SRC", "", ""),
             mirror_dst: str_or(
                 "FENGPAGE_MIRROR_DST",
-                "C:/FengNAS/Mirror/Sync_Important_Files",
+                "C:/FlyGoLegacy/Mirror/Sync_Important_Files",
                 "",
             ),
             components_path: target_path("FENGPAGE_COMPONENTS", "data/components.json", ""),
@@ -328,7 +331,7 @@ mod tests {
     use super::*;
 
     // T-02 (D1) regression: legacy absolute fallbacks are existence-gated.
-    // On a user machine without C:/FengNAS etc. they must never fire.
+    // On a user machine without C:/FlyGoLegacy etc. they must never fire.
     const NOPE_LEGACY: &str = "C:/definitely-not-here-t02/legacy.json";
 
     #[test]

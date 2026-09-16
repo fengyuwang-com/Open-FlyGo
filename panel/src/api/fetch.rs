@@ -34,12 +34,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 /// CREATE_NO_WINDOW: every child stays invisible.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::winproc::CREATE_NO_WINDOW;
 const DOWNLOAD_TIMEOUT_SECS: u64 = 600;
 const INSTALL_TIMEOUT_SECS: u64 = 900;
 
 /// One manifest entry.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(default)]
 pub struct FetchItem {
     pub id: String,
@@ -62,24 +62,6 @@ pub struct FetchItem {
     pub ref_: String,
     #[serde(default)]
     pub note: String,
-}
-
-impl Default for FetchItem {
-    fn default() -> Self {
-        FetchItem {
-            id: String::new(),
-            name: String::new(),
-            kind: String::new(),
-            version: String::new(),
-            required: false,
-            winget_id: String::new(),
-            urls: Vec::new(),
-            sha256: String::new(),
-            target_rel: String::new(),
-            ref_: String::new(),
-            note: String::new(),
-        }
-    }
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -468,12 +450,10 @@ fn install_item(item: &FetchItem) -> (bool, String, u64, bool, String) {
                 Err(e) => (false, e, 0, false, "winget".to_string()),
             };
         }
-        if item.kind == "msi" || item.kind == "archive" {
-            match run_wait("winget", &winget_install_args(&item.winget_id), INSTALL_TIMEOUT_SECS) {
-                Ok(0) => return (true, "installed via winget".to_string(), 0, true, "winget".to_string()),
-                // winget failed: fall through to manifest download below.
-                Ok(_) | Err(_) => {}
-            }
+        let winget_ok = || matches!(run_wait("winget", &winget_install_args(&item.winget_id), INSTALL_TIMEOUT_SECS), Ok(0));
+        if (item.kind == "msi" || item.kind == "archive") && winget_ok() {
+            return (true, "installed via winget".to_string(), 0, true, "winget".to_string());
+            // winget failed: fall through to manifest download below.
         }
     }
     // Layer 2: manifest download (fallback / winget-only-needs-manual).

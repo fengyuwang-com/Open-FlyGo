@@ -5,7 +5,7 @@
 // src/api/sync.rs run over real HTTP against an in-process axum server,
 // backed by a mock Syncthing REST API. All state lives in a temp install
 // root (fake syncthing config.xml included); the production install and
-// C:/FengNAS are never touched.
+// C:/FlyGoLegacy are never touched.
 //
 // Phases (sequential in one test because the process env is shared):
 //   1. overview with Syncthing unreachable -> 200 + degraded null block
@@ -17,10 +17,19 @@
 //
 // All code comments are pure ASCII.
 
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/settings.rs"]
 mod settings;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/config.rs"]
 mod config;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/api/sync.rs"]
 mod sync;
 
@@ -37,6 +46,15 @@ fn temp_dir() -> PathBuf {
 
 /// In-process mock Syncthing REST API (only the endpoints sync.rs touches).
 fn mock_syncthing(folders: Arc<Mutex<Vec<Value>>>) -> Router {
+    mock_syncthing_with_devices(folders, Arc::new(Mutex::new(Vec::new())))
+}
+
+/// Same mock plus a recorded device-config PUT store (for pending-device
+/// accept flows).
+fn mock_syncthing_with_devices(
+    folders: Arc<Mutex<Vec<Value>>>,
+    devices: Arc<Mutex<Vec<Value>>>,
+) -> Router {
     async fn status() -> Json<Value> {
         Json(json!({ "myID": "SELFDEV1CEID0000000000000000000000000000000000000000" }))
     }
@@ -49,11 +67,26 @@ fn mock_syncthing(folders: Arc<Mutex<Vec<Value>>>) -> Router {
     let f_list = folders.clone();
     let f_put = folders.clone();
     let f_del = folders.clone();
+    let d_put = devices.clone();
     Router::new()
         .route("/rest/system/status", axum::routing::get(status))
         .route(
             "/rest/config/devices",
             axum::routing::get(move || async move { Json(devs()) }),
+        )
+        .route(
+            "/rest/config/devices/:id",
+            axum::routing::put(
+                move |AxPath(id): AxPath<String>, Json(body): Json<Value>| {
+                    let d = d_put.clone();
+                    async move {
+                        let mut body = body;
+                        body["deviceID"] = json!(id);
+                        d.lock().unwrap().push(body);
+                        Json(json!({ "ok": true }))
+                    }
+                },
+            ),
         )
         .route(
             "/rest/system/connections",
@@ -328,6 +361,77 @@ fn sync_api_over_http() {
         // Unknown id delete -> clean error, list untouched.
         let v = call("DELETE", "/api/sync/links/lnk-00000000", None);
         assert_eq!(v["ok"], false);
+
+        // --- Phase 5: phone_target - one-step pending device accept + share ---
+        // Invalid folder_type rejected before any engine call.
+        let v = call(
+            "POST",
+            "/api/sync/link",
+            Some(&json!({
+                "folder_path": photos,
+                "target_kind": "syncthing",
+                "folder_type": "bothways"
+            })),
+        );
+        assert_eq!(v["ok"], false, "invalid folder_type rejected");
+
+        // pending_device_id + sendonly: device PUT then folder PUT with the
+        // peer entry typed sendonly.
+        let folders2: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+        let devices2: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+        let mock2 = mock_syncthing_with_devices(folders2.clone(), devices2.clone());
+        let ml2 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let maddr2 = ml2.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(ml2, mock2).await.unwrap() });
+        std::env::set_var("FENGPAGE_SYNCTHING_ADDR", format!("http://{maddr2}"));
+
+        let v = call(
+            "POST",
+            "/api/sync/link",
+            Some(&json!({
+                "folder_path": photos,
+                "target_kind": "syncthing",
+                "pending_device_id": "PHONEDEV1CEID000000000000000000000000000000000000",
+                "folder_type": "sendonly"
+            })),
+        );
+        assert_eq!(v["ok"], true, "phone_target link created: {v}");
+        let pushed_devs = devices2.lock().unwrap().clone();
+        assert_eq!(pushed_devs.len(), 1, "pending device accepted via device PUT");
+        assert_eq!(
+            pushed_devs[0]["deviceID"], "PHONEDEV1CEID000000000000000000000000000000000000",
+            "device PUT targeted the pending phone"
+        );
+        assert_eq!(pushed_devs[0]["paused"], false);
+        let pushed = folders2.lock().unwrap().clone();
+        assert_eq!(pushed.len(), 1, "one folder PUT after device accept");
+        assert_eq!(pushed[0]["type"], "sendreceive", "folder type itself stays sendreceive");
+        let peers = pushed[0]["devices"].as_array().cloned().unwrap_or_default();
+        assert_eq!(peers.len(), 2, "self + phone shared");
+        assert_eq!(
+            peers.iter().find(|d| d["deviceID"].as_str().map(|s| s.starts_with("PHONE")).unwrap_or(false))
+                .and_then(|d| d.get("type")).and_then(|t| t.as_str()),
+            Some("sendonly"),
+            "peer entry carries sendonly role"
+        );
+        // Legacy payload (no folder_type) still yields the plain default.
+        let v = call(
+            "POST",
+            "/api/sync/link",
+            Some(&json!({
+                "folder_path": dir.join("mirror").join("photos").to_string_lossy().replace('\\', "/"),
+                "target_kind": "syncthing"
+            })),
+        );
+        assert_eq!(v["ok"], true, "plain syncthing link still created: {v}");
+        let pushed = folders2.lock().unwrap().clone();
+        assert_eq!(pushed.len(), 2);
+        assert!(
+            pushed[1]["devices"].as_array().cloned().unwrap_or_default()
+                .iter()
+                .all(|d| d.get("type").is_none()),
+            "default peer entry has no explicit type"
+        );
 
         // Legacy endpoint still serves its payload shape.
         let v = get_json("/api/sync");

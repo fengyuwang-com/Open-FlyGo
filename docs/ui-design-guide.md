@@ -1,7 +1,7 @@
 # FlyGo UI 设计宪法（ui-design-guide）
 
 > 本文档是 FlyGo 面板（`panel/static/index.html`，单文件前端）的 UI 设计指导文件。
-> 来源：提炼自 `C:\FengProj\fengyuwang_com\DESIGN.md`（个人站设计规范）的**可迁移灵魂原则**，并按"工具型控制面板"（非营销站）做适配。
+> 来源：提炼自 `~/fengyuwang_com/DESIGN.md`（个人站设计规范）的**可迁移灵魂原则**，并按"工具型控制面板"（非营销站）做适配。
 > 状态：v1.0，2026-08-16。配套审计报告见 `ui-audit-report.md`。
 > 冲突仲裁：本文档与任何单次实现冲突时，以本文档为准；本文档与代码现状冲突时，以本文档为准（现状问题见审计报告）。
 

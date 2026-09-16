@@ -86,7 +86,7 @@ async fn main() {
     let bind: std::net::IpAddr = std::env::var("FENGDOG_BIND")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or_else(|| std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
+        .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
     let port = parse_port();
 
     let conn = match db::open_db(&db_path) {

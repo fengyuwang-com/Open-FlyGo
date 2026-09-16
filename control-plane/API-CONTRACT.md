@@ -1,6 +1,6 @@
 # FlyGo Control Plane — API Contract
 
-> 供所有 FlyGo 开发 Agent 对齐的 API 契约。来源：`src/main.rs` / `src/api/device.rs` / `src/api/admin.rs` / `src/db.rs` / `src/auth.rs`（封存仓库 FengNAS/control-plane 同源）。
+> 供所有 FlyGo 开发 Agent 对齐的 API 契约。来源：`src/main.rs` / `src/api/device.rs` / `src/api/admin.rs` / `src/db.rs` / `src/auth.rs`（封存仓库 FlyGoLegacy/control-plane 同源）。
 > 服务：Rust + axum 0.7 + SQLite（rusqlite bundled），单二进制，HTTP（非 TLS）。默认监听 `127.0.0.1:9001`（公网必须走反代终结 TLS）。
 
 ## 端点总览

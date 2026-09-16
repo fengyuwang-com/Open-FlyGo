@@ -3,7 +3,7 @@
 > 日期：2026-08-16 · 性质：纯调研（未改动 FlyGo 任何代码）
 > 研究目标：PlainApp「发射 / Web 服务器」功能在安卓 16 手机上无法使用的问题定位、修复方案、兜底方案、与 FlyGo 结合分析。
 > 源码版本：plainhub/plain-app（原 ismartcoding/plain-app，仓库已改名）main 分支，版本号 v3.3.2（2026-08-15 发布）。
-> 本地源码副本：`C:\Users\<user>\AppData\Local\Temp\plainapp-research\plain-app`
+> 本地源码副本：`~/AppData/Local/Temp/plainapp-research/plain-app`
 
 ---
 

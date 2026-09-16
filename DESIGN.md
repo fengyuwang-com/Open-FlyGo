@@ -1,6 +1,6 @@
 # FlyGo DESIGN — UI 设计宪法（所有界面唯一权威）
 
-> 2026-09-07 用户两轮拍板定稿：**配色 = 原版简洁蓝白**（冷 slate + 单一强调蓝 #2563eb）；**结构细节 = 参照 `C:\FengProj\llm-text-processor\frontend\`**（阴影层次、按键布局、侧栏细节、动效——它的好不在配色在结构）。
+> 2026-09-07 用户两轮拍板定稿：**配色 = 原版简洁蓝白**（冷 slate + 单一强调蓝 #2563eb）；**结构细节 = 参照 `~/llm-text-processor/frontend/`**（阴影层次、按键布局、侧栏细节、动效——它的好不在配色在结构）。
 > 适用范围：面板 `panel/static/index.html`、`login.html`、官网 `site/`、APK 内界面/WebView、控制面 admin 页——**一切 FlyGo 界面**。实现与本文冲突时以本文为准。
 > 判定总纲：**FlyGo 是"给人用的工具"**。信息密度与操作效率优先。
 

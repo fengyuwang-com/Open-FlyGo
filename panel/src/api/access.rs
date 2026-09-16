@@ -25,7 +25,7 @@
 // All code comments are pure ASCII; JSON payloads are UTF-8.
 
 use crate::ApiResult;
-use crate::log::{log_error, log_info, log_warn};
+use crate::log::{log_error, log_info};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::os::windows::process::CommandExt;
@@ -38,7 +38,7 @@ use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
 /// CREATE_NO_WINDOW: powershell.exe / netsh are console apps; spawned from a
 /// GUI parent they flash a black window unless this flag is set.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::winproc::CREATE_NO_WINDOW;
 
 /// Elevated helper script + result file, both in the current user's %TEMP%
 /// (same %TEMP% for the elevated same-user process, so no path mismatch).

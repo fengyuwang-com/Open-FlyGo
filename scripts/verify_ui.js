@@ -8,7 +8,7 @@
 const fs = require("fs");
 // Served HTML dump location: FENGPAGE_TEST_HTML override, dev-machine fallback.
 // Default to the checked-in panel bundle. FENGPAGE_TEST_HTML remains available
-// for testing an explicitly served build, but a machine-local FengNAS dump can
+// for testing an explicitly served build, but a machine-local FlyGoLegacy dump can
 // be stale and must not silently mask the current UI.
 const defaultHtml = require("path").resolve(__dirname, "../panel/static/index.html");
 const html = fs.readFileSync(process.env.FENGPAGE_TEST_HTML || defaultHtml, "utf-8");

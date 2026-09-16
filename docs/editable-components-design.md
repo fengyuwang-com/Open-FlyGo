@@ -40,7 +40,7 @@
 | `api/autostart.rs` | `DEPRECATED_HINTS` 废弃候选名单（fengvault/openclaw/hermes/百度/夸克） | 硬编码（只标记不硬删） |
 | `daemon.rs` | `DEFAULT_COMPONENTS = ["webcli"]`；托盘组件名 webcli/syncthing/homepage | 硬编码 |
 | `api/stats.rs` | `/api/flags` 运行时 GET/POST 开关（`feature.*`），**不持久化**（重启丢失） | 先例：单 handler 收 GET+POST 的写法可借鉴 |
-| `config.rs` | 三级路径解析（env > 安装根 > legacy C:\FengNAS），所有机器特定路径已收敛于此 | 本次设计直接复用此模式 |
+| `config.rs` | 三级路径解析（env > 安装根 > legacy C:\FlyGoLegacy），所有机器特定路径已收敛于此 | 本次设计直接复用此模式 |
 
 ### 1.3 结论：哪些动态、哪些硬编码
 

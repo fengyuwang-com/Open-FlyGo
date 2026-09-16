@@ -24,7 +24,12 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 // CREATE_NO_WINDOW: keep child console apps from flashing a black window.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+// Shared definition lives in the panel's winproc module (included by path
+// because launcher is its own binary crate).
+#[allow(dead_code)]
+#[path = "../winproc.rs"]
+mod winproc;
+use winproc::CREATE_NO_WINDOW;
 
 // True when the panel accepts TCP connections on the panel port.
 fn panel_is_up(connect_timeout: Duration) -> bool {
@@ -114,7 +119,7 @@ fn open_browser() {
 
 fn main() {
     // Read flygo.toml once (FENGPAGE_CONFIG > install root config/ > legacy
-    // C:/FengNAS; defaults when absent) so the probe/URL/wait budget all
+    // C:/FlyGoLegacy; defaults when absent) so the probe/URL/wait budget all
     // come from the same source as the panel itself.
     settings::init();
     // Cold boots can take 1-2 min (SMB share setup stalls on LanmanServer);
@@ -143,9 +148,7 @@ fn main() {
     // start that outlasts the budget must NOT give up silently: open the
     // browser anyway on the waiting state (the splash polls
     // /api/boot/status until the slow init finishes).
-    if !cold_start {
-        open_browser();
-    } else if !panel_is_up(connect_timeout) {
+    if !cold_start || !panel_is_up(connect_timeout) {
         open_browser();
     }
 }

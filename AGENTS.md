@@ -37,13 +37,13 @@ FlyGo（飞狗）= **私有云数据平台**：把闲置电脑/手机/硬盘变�
 ## 四、当前状态（2026-09-06 全量审读轮刷新）
 
 - main=`bb8550e` → 本轮修复后新提交：**全量代码审读完成，修 4 个逻辑 bug**（①syncview 测试 config::init ②Velopack 卸载钩子 T-10 漏入库已补回 ③fetch.rs async 阻塞挪 spawn_blocking ④probe_share "NOK".contains("OK") 恒可达）——116 panel 测试全绿。架构图画好：`docs/architecture-diagrams.md`（7 张 mermaid：四层架构/启动序列/退出契约/SMB 状态机/组件拉取/同步拓扑/bug 台账）。审读台账见 todo.md §八。
-- T 系列进度：T-06/07/08/09/10 ✅ 代码侧完成（T-08 组件拉取系统 · T-09 Syncthing 落地 winget 三级解析+GUI 仅绑 localhost · T-10 Velopack 安装器 8.6MB Setup）；T-11 卡 VPS 部署、T-12 卡 release keystore（均用户白天亲手）；T-13 售后诊断包未开工。
+- T 系列进度：T-06/07/08/09/10 ✅ 代码侧完成（T-08 组件拉取系统 · T-09 Syncthing 落地 winget 三级解析+GUI 仅绑 localhost · T-10 Velopack 安装器 8.6MB Setup）；T-11 卡 VPS 部署、T-12 卡 release keystore（均用户白天亲手）；T-13 售后诊断包 ✅（2ce67e9：GET /api/diagnostics/bundle + 导出按钮 + docs/after-sales-sop.md）。
 - 红色警报根治（已装机）：**Windows SMB 系统级共享关不掉/延迟大**——①SMB 共享不随进程消失、须显式删；②托盘「退出」原 `process::exit(0)` 竞态抢先优雅关停（`fed0fc1` 修）；③SMB 每次 spawn PowerShell 冷启动慢拖死退出（`5743e45` 批量 remove_many/revoke_many + ps()25s/drive_root_online 3s 超时 + close_app 8s 上限 + 开机孤儿自愈 reconcile_stale_shares）。配套：`22bdfbb` settings 内存态随 persist_smb 刷新（「不挂载」界面即时生效）· `e873be3` 全量结构化日志（log.rs → data/logs/flygo.log）· `b57fb97` 未挂载盘不再渲染可达 UNC · `9ca7390` panel-quality pack。进程退出挂起已由 main() 尾部 `exit(0)` 兜底根治。
 - 实测铁证：新版托盘优雅退出后 **C/E 共享约 1.1s 内消失**（1056ms/1107ms），net share 仅剩系统默认管理共享。
 - 「不挂载」语义（董事长拍板）= **仅停止网络共享**，不是弹出 USB 盘（与托盘"安全弹出外置盘"是两回事，勿混淆）。
-- 遗留待立项（诚实，勿夸大成已解决）：**进程退出挂起**——优雅退出能删共享、到 `[FlyGo] bye`，但进程不真终止（wsl-keepalive 无限循环线程 + 后台 tokio 任务拖住，既有问题非本轮引入）；开机 SMB 基线 apply_guest/ACL 慢（boot 100-154s，已被超时兜底不挂死）；黑色弹窗=Powershell -WindowStyle Hidden 从托盘 context 失效，计划 Win32 CreateProcessW+SW_HIDE 根治（Cargo.toml 已加 Win32_Security feature 预留）。
+- 遗留三件套 2026-09-10 夜全清（代码侧已并入 main，真机验证留白天）：①**进程退出挂起**=真凶实锤托盘 cmd-runner 阻塞 spawn_blocking（static CMD_TX 永不 drop）——修=手动 runtime+shutdown_timeout(3s)+SHUTTING_DOWN 位+六步关停记账（跑完自然退出，exit(0) 仅兜底并打 WARN）；②**黑色弹窗**=全仓 spawn 点统一收编 panel/src/winproc.rs（CREATE_NO_WINDOW 单一来源+hidden_command()，含魔数守卫单测防回归）；③**开机 SMB 慢**=关键瓶颈 PS_LOCK 串行（secedit 持锁 25s 堵 create_all）——修=create_all 调序+批量探测 shares_existing+smb.boot 计时日志全埋点（下次开机 flygo.log 回填实测）。另：check-secrets.sh 已修源码误报（.rs 等源码扩展只查 PEM，.env/PEM 防护不变）。**合并后全量审查**（0 P0/1 P1）已修：shares_existing 探测失败回退 Option、Ctrl+C 即时置位、panic hook 防挂死、内存序 Acquire/Release。质量基线：panel 316+control-plane 8 测试绿，clippy 双 crate 0 警告，`scripts/regression.sh` 十门全绿（合并前必跑）。
 - 里程碑（history）：M10 /ws/status（c1c3ccf）· M11 网速+温度诚实化（d1079dc）· M13 control-plane admin UI + DEPLOY-VPS/API-CONTRACT（4243e84+4f430d1+79bef25）· M14 UI 审计整改+Cache-Control（8b95dac 等）· M15 稳健加固+check-secrets.sh（aa872e5）· M16 北极星验收脚本 · M17 文档 reconciliation（docs/m17-reconcile）。
-- 手机：v0.1 品牌版已装机；1.0 APK 已构建 bin/flygo-mobile-1.0.0-20260817-debug.apk（M02，debug 签名；release 签名待用户）。
+- 手机：v0.1 品牌版已装机；1.0 APK 已构建 bin/flygo-mobile-1.0.0-20260817-debug.apk（M02，debug 签名；release 签名待用户）。**手机↔手机经电脑中转已实现**（feat/phone-sync-closure：pending 配对闭环 + POST /api/sync/folders/:id/share，详见 docs/phone-to-phone-sync.md；D6 真机验证留白天）。
 - 基建：Tailscale Serve 三入口（`/`面板 `/ctrl`控制面 `:8443`webcli，tailnet-only）；skill-tailscale-serve 已建仓。
 - 监控事实：**温度与网速均已有（M11）**——别再写反。
 - 外部阻塞（商业上线硬前置，白天用户亲手，不阻塞本地开发）：DNS 解析 · VPS 部署（DEPLOY-VPS.md 就绪）· release keystore 签名 · 真机装 1.0 APK 实测 · 香港远程实测。详见 docs/master-plan-2026-08-17.md §五。
@@ -55,7 +55,7 @@ FlyGo（飞狗）= **私有云数据平台**：把闲置电脑/手机/硬盘变�
 |---|---|---|
 | Syncthing | 全部同步链路（staggered 版本控制内置） | ✅ |
 | Tailscale | 节点互联 | ✅ |
-| **PlainApp（fork）** | **手机客户端主体**（2026-08-16 转向：fork 定案，不再是"只借鉴模式"） | ✅ fork 中 |
+| **PlainApp（fork）** | **手机客户端主体**（2026-08-16 转向：fork 定案，不再是"只借鉴模式"）；手机↔手机同步两条路径：经电脑中转（Syncthing 同文件夹共享两台手机，已实现，见 docs/phone-to-phone-sync.md）+ 近场直连传文件（PeerFileDownloader，一次性非同步） | ✅ fork 中 |
 | Jellyfin/Immich/Vaultwarden/qBittorrent 等 | 媒体/相册/密码/下载（容器按需） | 📋 |
 | HomeDash 精华 / 服务卡片墙 | 三色检测+WS 推送 | ✅ 已拼入 |
 
@@ -72,11 +72,11 @@ FlyGo（飞狗）= **私有云数据平台**：把闲置电脑/手机/硬盘变�
 
 ## 六、铁律（违反会出事）
 
-1. **FengNAS（C:\FengNAS）只读**：容器数据+WSL 引用一根手指不碰；迁移只 `cp -r`。
+1. **只读区**：容器数据目录与 WSL 引用不要直接改；需要迁移时只做整目录复制。
 2. **敏感文件绝不入库**：term_token.env / alist_pass.txt / docker-compose.yml.bak / *.env——提交前必跑 `scripts/check-secrets.sh`（已执行 `git config core.hooksPath .githooks` 时由 pre-commit 自动拦截）。
 3. **编码**：代码注释/日志/错误消息英文 ASCII；中文文档显式 UTF-8。
 4. **国内镜像**下载（rsproxy/TUNA/npmmirror/ghfast），不硬连境外源。
-5. **子 Agent 后台调用**（串行优先防 captcha）；任务必须入账根 `todo.md`（唯一根本）；主 Agent 不闷头写大量代码。
+5. **子 Agent 后台调用**（串行优先防 captcha）；任务必须入账根 `todo.md`（唯一根本，**只写未完成项，做完即删**——历史去 git log/FENGMEM.md，不留 `[x]` 存档，2026-09-10 董事长立）；主 Agent 不闷头写大量代码。
 6. **双推**：`git push origin main && git push gitee main`。
 7. **端口**：8388 面板 · 8788 webcli · 8384 Syncthing · 9001 控制面 · 8443 webcli(TS)。
 8. **UI 按 DESIGN.md**；新原则/架构决定**及时回写本 AGENTS.md**。

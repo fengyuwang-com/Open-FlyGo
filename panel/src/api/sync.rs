@@ -22,6 +22,8 @@
 //   GET  /api/sync/links       -> list recorded links
 //   DELETE /api/sync/links/:id -> drop one link (a Syncthing folder is removed
 //                                 best-effort; files are never deleted)
+//   POST /api/sync/folders/:id/share -> share an existing Syncthing folder
+//                                 with paired devices (phone-to-phone relay)
 //
 // The new handlers own a small SyncState (a tray snapshot closure + the links
 // file path) instead of the binary's AppState, so the integration test binary
@@ -125,6 +127,30 @@ fn st_call(agent: &ureq::Agent, apikey: &str, method: &str, path: &str, body: Op
 
 fn short_id(id: &str) -> String {
     id.chars().take(7).collect()
+}
+
+/// Syncthing device IDs are base32 strings (optionally shown with dashes).
+/// Every device id that reaches a REST URL segment or a config key must pass
+/// this charset gate first, so a crafted value can never traverse to other
+/// engine endpoints (same rationale as `valid_folder_id`).
+fn valid_device_id(id: &str) -> bool {
+    (8..=64).contains(&id.chars().count())
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
+/// Syncthing folder IDs are user-visible labels used as a REST URL segment
+/// AND (for freshly accepted folders without an explicit path) as a directory
+/// name under <root>/sync/. Reject quotes-free traversal: only alphanumerics
+/// and -_. are allowed, and "." / ".." / leading-dot names are refused so the
+/// value can never escape the sync root or alter the endpoint path.
+fn valid_folder_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.chars().count() <= 64
+        && !id.starts_with('.')
+        && !id.contains('/')
+        && !id.contains('\\')
+        && !id.contains("..")
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
 /// u64 out of a JSON number (int or float form).
@@ -320,7 +346,7 @@ pub async fn overview(State(st): State<Arc<SyncState>>) -> Json<Value> {
     let tray = (st.tray)();
     let apikey = read_apikey();
     let syncthing = tokio::task::spawn_blocking(move || match apikey.as_deref() {
-        Some(k) => collect_syncthing(k).map_err(|e| e),
+        Some(k) => collect_syncthing(k),
         None => Err("Syncthing API key not found in config.xml".to_string()),
     })
     .await
@@ -453,6 +479,26 @@ pub struct LinkReq {
     pub folder_path: String,
     pub target_kind: String,
     pub target_id: Option<String>,
+    /// Optional engine folder type for the peer share: sendreceive (default) |
+    /// sendonly | receiveonly. Only applied to the peer entry; this node
+    /// always keeps full sendreceive.
+    pub folder_type: Option<String>,
+    /// Optional pending phone device to accept and share with in one step
+    /// ("phone_target"): the device is PUT into the engine config before the
+    /// folder is created, so no manual device-ID entry is needed.
+    pub pending_device_id: Option<String>,
+}
+
+/// Normalize the requested folder type; None = engine default sendreceive.
+fn folder_type_of(req: &Option<String>) -> Result<String, String> {
+    match req.as_deref().map(|s| s.trim().to_ascii_lowercase()) {
+        None => Ok("sendreceive".into()),
+        Some(t) if t.is_empty() || t == "sendreceive" => Ok("sendreceive".into()),
+        Some(t) if t == "sendonly" || t == "receiveonly" => Ok(t),
+        Some(t) => Err(format!(
+            "folder_type 须为 sendreceive / sendonly / receiveonly（收到 {t}）"
+        )),
+    }
 }
 
 /// Build the Syncthing folder document for the wizard. Engine defaults are
@@ -461,10 +507,16 @@ pub struct LinkReq {
 ///   versioning = staggered, maxAge 7 days (staggered retention has no
 ///   max-versions knob; the age window is what bounds history, covering the
 ///   "10 versions / 7 days" product default).
-fn st_folder_doc(folder: &str, label: &str, id: &str, self_id: &str, peer: Option<&str>) -> Value {
+fn st_folder_doc(folder: &str, label: &str, id: &str, self_id: &str, peer: Option<(&str, &str)>) -> Value {
     let mut devices = vec![json!({ "deviceID": self_id })];
-    if let Some(p) = peer {
-        devices.push(json!({ "deviceID": p }));
+    if let Some((p, ptype)) = peer {
+        let mut entry = json!({ "deviceID": p });
+        // Only carry an explicit type when it deviates from the engine default
+        // (sendreceive); Syncthing fills the rest with its own defaults.
+        if ptype != "sendreceive" {
+            entry["type"] = json!(ptype);
+        }
+        devices.push(entry);
     }
     json!({
         "id": id,
@@ -520,6 +572,10 @@ pub async fn create_link(State(st): State<Arc<SyncState>>, Json(body): Json<Link
     }
 
     let mut st_folder: Option<String> = None;
+    // Device actually shared with in the syncthing arm: explicit target_id or
+    // the one-step pending phone. Persisted as the link's target_id so the
+    // links list shows a paired peer instead of "仅本机登记".
+    let mut st_peer: Option<String> = None;
     match kind.as_str() {
         "mirror" => {
             let Some(dest_raw) = &target else {
@@ -540,17 +596,36 @@ pub async fn create_link(State(st): State<Arc<SyncState>>, Json(body): Json<Link
         }
         "syncthing" => {
             if let Some(p) = &target {
-                if p.len() > 128 {
+                if !valid_device_id(p) {
                     return fail_json("target_id（设备 ID）格式不正确".into());
                 }
             }
+            // "phone_target" semantics: accept a pending phone device (panel
+            // UI picked it from /api/sync/pending) and share with it in one
+            // step, so no device-ID typing is needed on either side.
+            let pending_dev = body
+                .pending_device_id
+                .as_deref()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            if let Some(p) = &pending_dev {
+                if !valid_device_id(p) {
+                    return fail_json("pending_device_id 设备 ID 格式不正确".into());
+                }
+            }
+            let ftype = match folder_type_of(&body.folder_type) {
+                Ok(t) => t,
+                Err(e) => return fail_json(e),
+            };
             let apikey = match read_apikey() {
                 Some(k) => k,
                 None => return fail_json("Syncthing API key 不可读（config.xml 缺失）".into()),
             };
             let folder_arg = folder.clone();
             let label = folder_label(&folder);
-            let peer = target.clone();
+            let peer = target.clone().or_else(|| pending_dev.clone());
+            st_peer = peer.clone();
+            let accept_dev = pending_dev.clone();
             let created = tokio::task::spawn_blocking(move || -> Result<(String, String), String> {
                 let agent = st_agent();
                 let status = st_call(&agent, &apikey, "GET", "/rest/system/status", None)?;
@@ -561,6 +636,27 @@ pub async fn create_link(State(st): State<Arc<SyncState>>, Json(body): Json<Link
                     .to_string();
                 if self_id.is_empty() {
                     return Err("Syncthing 未返回本机设备 ID".into());
+                }
+                // One-step pending-device accept (idempotent: an already
+                // paired device is left as-is by the engine PUT).
+                if let Some(dev) = &accept_dev {
+                    if dev != &self_id {
+                        let doc = json!({
+                            "deviceID": dev,
+                            "name": "",
+                            "addresses": ["dynamic"],
+                            "compression": "metadata",
+                            "introducer": false,
+                            "paused": false,
+                        });
+                        st_call(
+                            &agent,
+                            &apikey,
+                            "PUT",
+                            &format!("/rest/config/devices/{dev}"),
+                            Some(&doc),
+                        )?;
+                    }
                 }
                 let folders = st_call(&agent, &apikey, "GET", "/rest/config/folders", None)?;
                 let existing = folders.as_array().cloned().unwrap_or_default();
@@ -577,7 +673,13 @@ pub async fn create_link(State(st): State<Arc<SyncState>>, Json(body): Json<Link
                     ));
                 }
                 let id = st_folder_id(&folder_arg, &existing);
-                let doc = st_folder_doc(&folder_arg, &label, &id, &self_id, peer.as_deref());
+                let doc = st_folder_doc(
+                    &folder_arg,
+                    &label,
+                    &id,
+                    &self_id,
+                    peer.as_deref().map(|p| (p, ftype.as_str())),
+                );
                 st_call(
                     &agent,
                     &apikey,
@@ -603,7 +705,7 @@ pub async fn create_link(State(st): State<Arc<SyncState>>, Json(body): Json<Link
     // ---- persist (blocking file IO) ----
     let links_path = st.links_path.clone();
     let label = folder_label(&folder);
-    let target_final = target.clone();
+    let target_final = target.clone().or_else(|| st_peer.clone());
     let written = tokio::task::spawn_blocking(move || -> Result<SyncLink, String> {
         let mut links = read_links_file(&links_path);
         let link = SyncLink {
@@ -698,6 +800,423 @@ pub async fn delete_link(
 }
 
 // ---------------------------------------------------------------------------
+// pending devices / folders (phone pairing closure)
+//
+// When a phone running Syncthing-Fork scans the panel QR, it announces itself
+// to this node; Syncthing parks the offer in /rest/config/pending/*. These
+// handlers let the UI poll and resolve those offers without any device-ID
+// typing. All engine access is the same blocking st_call pattern as above.
+// ---------------------------------------------------------------------------
+
+/// Pull one pending entry out of an object-keyed or array-shaped REST reply.
+/// Syncthing returns object maps keyed by id (folder id / device id); both
+/// shapes are tolerated to stay robust across engine versions.
+fn pending_entries(v: &Value, id_key: &str) -> Vec<(String, Value)> {
+    let entry_id = |body: &Value| -> Option<String> {
+        body.get(id_key)
+            .and_then(|x| x.as_str())
+            .map(String::from)
+            .filter(|s| !s.is_empty())
+    };
+    match v {
+        Value::Object(map) => map
+            .iter()
+            .map(|(k, body)| (entry_id(body).unwrap_or_else(|| k.clone()), body.clone()))
+            .collect(),
+        Value::Array(arr) => arr
+            .iter()
+            .filter_map(|body| entry_id(body).map(|id| (id, body.clone())))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// GET /api/sync/pending -> phones waiting to be accepted + folders shared to
+/// us by already-paired devices. Engine down degrades to empty lists (200),
+/// matching the overview convention.
+pub async fn pending() -> Json<Value> {
+    let apikey = read_apikey();
+    let res = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+        let agent = st_agent();
+        let key = apikey.ok_or("Syncthing API key 不可读（config.xml 缺失）")?;
+        let dev_raw = st_call(&agent, &key, "GET", "/rest/config/pending/devices", None)
+            .unwrap_or_else(|_| json!({}));
+        let fold_raw = st_call(&agent, &key, "GET", "/rest/config/pending/folders", None)
+            .unwrap_or_else(|_| json!({}));
+
+        let devices: Vec<Value> = pending_entries(&dev_raw, "deviceID")
+            .into_iter()
+            .map(|(id, body)| {
+                let name = body
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.trim().is_empty())
+                    .map(String::from)
+                    .unwrap_or_else(|| short_id(&id));
+                json!({ "id": id, "short_id": short_id(&id), "name": name })
+            })
+            .collect();
+
+        let folders: Vec<Value> = pending_entries(&fold_raw, "id")
+            .into_iter()
+            .map(|(id, body)| {
+                // offeredBy: map of deviceID -> {label, receiveEncrypted, ...}
+                let offered = body
+                    .get("offeredBy")
+                    .and_then(|v| v.as_object())
+                    .map(|m| {
+                        m.iter()
+                            .map(|(dev, info)| {
+                                json!({
+                                    "device": dev,
+                                    "label": info.get("label").and_then(|v| v.as_str()).unwrap_or(""),
+                                })
+                            })
+                            .collect::<Vec<Value>>()
+                    })
+                    .unwrap_or_default();
+                let label = offered
+                    .first()
+                    .and_then(|o| o.get("label"))
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+                    .unwrap_or_else(|| id.clone());
+                json!({
+                    "id": id,
+                    "label": label,
+                    "offered_by": offered,
+                })
+            })
+            .collect();
+
+        Ok(json!({ "ok": true, "devices": devices, "folders": folders }))
+    })
+    .await
+    .unwrap_or_else(|e| Err(format!("pending task panicked: {e}")));
+
+    match res {
+        Ok(v) => ok_json(v),
+        Err(e) => ok_json(json!({ "ok": true, "devices": [], "folders": [], "error": e })),
+    }
+}
+
+/// POST /api/sync/pending/devices/:id/accept -> add the phone to this node's
+/// engine config (dynamic addresses, metadata compression), clearing the
+/// pending entry on the engine side.
+pub async fn accept_pending_device(axum::extract::Path(id): axum::extract::Path<String>) -> Json<Value> {
+    let id = id.trim().to_string();
+    if !valid_device_id(&id) {
+        return fail_json("设备 ID 格式不正确".into());
+    }
+    let res = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+        let agent = st_agent();
+        let key = read_apikey().ok_or("Syncthing API key 不可读（config.xml 缺失）")?;
+        // Carry over the name the phone announced, if still available.
+        let pend = st_call(&agent, &key, "GET", "/rest/config/pending/devices", None)
+            .unwrap_or_else(|_| json!({}));
+        let name = pending_entries(&pend, "deviceID")
+            .into_iter()
+            .find(|(pid, _)| *pid == id)
+            .and_then(|(_, body)| {
+                body.get("name")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                    .filter(|s| !s.trim().is_empty())
+            })
+            .unwrap_or_default();
+        let doc = json!({
+            "deviceID": id,
+            "name": name,
+            "addresses": ["dynamic"],
+            "compression": "metadata",
+            "introducer": false,
+            "paused": false,
+        });
+        st_call(&agent, &key, "PUT", &format!("/rest/config/devices/{id}"), Some(&doc))?;
+        Ok(ok_json(json!({
+            "ok": true,
+            "message": format!("已接受设备 {}（{}）", short_id(&id), if name.is_empty() { "手机" } else { &name }),
+        }))
+        .0)
+    })
+    .await
+    .unwrap_or_else(|e| Err(format!("accept device task panicked: {e}")));
+
+    match res {
+        Ok(v) => ok_json(v),
+        Err(e) => fail_json(format!("接受设备失败：{e}")),
+    }
+}
+
+/// DELETE /api/sync/pending/devices/:id/dismiss -> drop the pairing offer.
+pub async fn dismiss_pending_device(axum::extract::Path(id): axum::extract::Path<String>) -> Json<Value> {
+    let id = id.trim().to_string();
+    if !valid_device_id(&id) {
+        return fail_json("设备 ID 格式不正确".into());
+    }
+    let res = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+        let agent = st_agent();
+        let key = read_apikey().ok_or("Syncthing API key 不可读（config.xml 缺失）")?;
+        st_call(&agent, &key, "DELETE", &format!("/rest/config/pending/devices/{id}"), None)?;
+        Ok(ok_json(json!({
+            "ok": true,
+            "message": format!("已忽略设备 {}", short_id(&id)),
+        }))
+        .0)
+    })
+    .await
+    .unwrap_or_else(|e| Err(format!("dismiss device task panicked: {e}")));
+
+    match res {
+        Ok(v) => ok_json(v),
+        Err(e) => fail_json(format!("忽略设备失败：{e}")),
+    }
+}
+
+#[derive(Deserialize, Debug, Default)]
+pub struct PendingFolderReq {
+    /// Local path for a not-yet-configured folder; falls back to
+    /// <install root>/sync/<folder id>.
+    pub path: Option<String>,
+}
+
+/// POST /api/sync/pending/folders/:folder/:device/accept -> accept a folder
+/// shared by an already-paired device. Existing local folder gains the device
+/// in its share list; a new folder is created unpaused (sendreceive +
+/// staggered versioning, same engine defaults as the link wizard).
+pub async fn accept_pending_folder(
+    axum::extract::Path((folder, device)): axum::extract::Path<(String, String)>,
+    body: Option<Json<PendingFolderReq>>,
+) -> Json<Value> {
+    let folder = folder.trim().to_string();
+    let device = device.trim().to_string();
+    if !valid_folder_id(&folder) {
+        return fail_json("文件夹 ID 格式不正确".into());
+    }
+    if !valid_device_id(&device) {
+        return fail_json("设备 ID 格式不正确".into());
+    }
+    let custom_path = body
+        .as_ref()
+        .and_then(|Json(b)| b.path.as_deref())
+        .map(normalize_path)
+        .filter(|p| !p.is_empty());
+
+    let res = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+        let agent = st_agent();
+        let key = read_apikey().ok_or("Syncthing API key 不可读（config.xml 缺失）")?;
+        let status = st_call(&agent, &key, "GET", "/rest/system/status", None)?;
+        let self_id = status.get("myID").and_then(|v| v.as_str()).unwrap_or("");
+        if self_id.is_empty() {
+            return Err("Syncthing 未返回本机设备 ID".into());
+        }
+
+        // Pending entry for label info (best-effort; offer may be gone).
+        let pend = st_call(&agent, &key, "GET", "/rest/config/pending/folders", None)
+            .unwrap_or_else(|_| json!({}));
+        let pending_entry = pending_entries(&pend, "id")
+            .into_iter()
+            .find(|(fid, _)| *fid == folder)
+            .map(|(_, body)| body);
+        let offer_label = pending_entry
+            .as_ref()
+            .and_then(|p| p.get("offeredBy"))
+            .and_then(|o| o.get(&device).or_else(|| o.get(self_id)))
+            .and_then(|v| v.get("label"))
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(String::from);
+
+        let folders = st_call(&agent, &key, "GET", "/rest/config/folders", None)?;
+        let existing = folders.as_array().cloned().unwrap_or_default();
+        let doc = match existing
+            .iter()
+            .find(|f| f.get("id").and_then(|v| v.as_str()) == Some(folder.as_str()))
+        {
+            // Folder already configured here: just share it with the device.
+            Some(f) => {
+                let mut doc = f.clone();
+                let mut devs = doc
+                    .get("devices")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                if !devs.iter().any(|d| d.get("deviceID").and_then(|v| v.as_str()) == Some(&device)) {
+                    devs.push(json!({ "deviceID": device, "introducedBy": "" }));
+                    doc["devices"] = Value::Array(devs);
+                }
+                doc["paused"] = json!(false);
+                doc
+            }
+            // New folder: engine defaults mirroring st_folder_doc, unpaused.
+            None => {
+                let path = match &custom_path {
+                    Some(p) if is_abs_path(p) => p.clone(),
+                    Some(p) => return Err(format!("path 需为绝对路径（收到 {p}）")),
+                    None => {
+                        let root = crate::config::get()
+                            .sync_links
+                            .parent()
+                            .and_then(|d| d.parent())
+                            .map(|d| d.to_path_buf())
+                            .unwrap_or_else(|| PathBuf::from("."));
+                        let p = root.join("sync").join(&folder);
+                        std::fs::create_dir_all(&p).map_err(|e| format!("创建目录 {} 失败: {e}", p.display()))?;
+                        p.to_string_lossy().replace('\\', "/")
+                    }
+                };
+                let label = offer_label.unwrap_or_else(|| folder.clone());
+                let mut doc = st_folder_doc(
+                    &path,
+                    &label,
+                    &folder,
+                    self_id,
+                    Some((device.as_str(), "sendreceive")),
+                );
+                doc["paused"] = json!(false);
+                doc
+            }
+        };
+        st_call(&agent, &key, "PUT", &format!("/rest/config/folders/{folder}"), Some(&doc))?;
+        Ok(ok_json(json!({
+            "ok": true,
+            "message": format!("已接受共享文件夹 {folder}（来自设备 {}）", short_id(&device)),
+        }))
+        .0)
+    })
+    .await
+    .unwrap_or_else(|e| Err(format!("accept folder task panicked: {e}")));
+
+    match res {
+        Ok(v) => ok_json(v),
+        Err(e) => fail_json(format!("接受共享文件夹失败：{e}")),
+    }
+}
+
+#[derive(Deserialize, Debug, Default)]
+pub struct ShareFolderReq {
+    /// Device IDs to share the folder with (already-paired phones/PCs).
+    pub device_ids: Vec<String>,
+}
+
+/// POST /api/sync/folders/:id/share -> share an existing Syncthing folder with
+/// one or more already-paired devices. This is the missing half of the
+/// phone-to-phone relay (D6): the PC shares the SAME folder with phone A and
+/// phone B; once both phones accept the share in Syncthing-Fork, the two
+/// phones sync with each other through the PC as the relay node.
+///
+/// Any device id that is not yet in the engine config is PUT in first (same
+/// doc as accept_pending_device), so the share works for a phone that paired
+/// moments ago; the PUT is idempotent for already-paired devices.
+pub async fn share_folder(
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Json(body): Json<ShareFolderReq>,
+) -> Json<Value> {
+    let id = id.trim().to_string();
+    if !valid_folder_id(&id) {
+        return fail_json("文件夹 ID 格式不正确".into());
+    }
+    let mut devs: Vec<String> = Vec::new();
+    for s in &body.device_ids {
+        let d = s.trim();
+        if d.is_empty() {
+            continue;
+        }
+        if !valid_device_id(d) {
+            return fail_json("device_ids 含非法设备 ID".into());
+        }
+        devs.push(d.to_string());
+    }
+    devs.dedup();
+    if devs.is_empty() {
+        return fail_json("device_ids 不能为空（至少一台设备）".into());
+    }
+
+    let res = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+        let agent = st_agent();
+        let key = read_apikey().ok_or("Syncthing API key 不可读（config.xml 缺失）")?;
+        let folders = st_call(&agent, &key, "GET", "/rest/config/folders", None)?;
+        let existing = folders.as_array().cloned().unwrap_or_default();
+        let mut doc = existing
+            .iter()
+            .find(|f| f.get("id").and_then(|v| v.as_str()) == Some(id.as_str()))
+            .cloned()
+            .ok_or_else(|| format!("文件夹不存在：{id}"))?;
+        let mut share_list = doc
+            .get("devices")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let is_shared = |list: &[Value], dev: &str| {
+            list.iter()
+                .any(|d| d.get("deviceID").and_then(|v| v.as_str()) == Some(dev))
+        };
+        // Ensure every requested device exists in the engine config (idempotent
+        // for already-paired devices), then append it to the folder share list.
+        for dev in &devs {
+            if !is_shared(&share_list, dev) {
+                let ddoc = json!({
+                    "deviceID": dev,
+                    "name": "",
+                    "addresses": ["dynamic"],
+                    "compression": "metadata",
+                    "introducer": false,
+                    "paused": false,
+                });
+                st_call(&agent, &key, "PUT", &format!("/rest/config/devices/{dev}"), Some(&ddoc))?;
+                share_list.push(json!({ "deviceID": dev, "introducedBy": "" }));
+            }
+        }
+        doc["devices"] = Value::Array(share_list);
+        st_call(&agent, &key, "PUT", &format!("/rest/config/folders/{id}"), Some(&doc))?;
+        Ok(ok_json(json!({
+            "ok": true,
+            "message": format!("已把文件夹 {id} 共享给 {} 台设备（手机在 Syncthing-Fork 中接受后即开始互相同步）", devs.len()),
+        }))
+        .0)
+    })
+    .await
+    .unwrap_or_else(|e| Err(format!("share folder task panicked: {e}")));
+
+    match res {
+        Ok(v) => ok_json(v),
+        Err(e) => fail_json(format!("共享文件夹失败：{e}")),
+    }
+}
+
+/// DELETE /api/sync/pending/folders/:folder/:device/dismiss -> drop the
+/// folder share offer.
+pub async fn dismiss_pending_folder(
+    axum::extract::Path((folder, device)): axum::extract::Path<(String, String)>,
+) -> Json<Value> {
+    let folder = folder.trim().to_string();
+    let device = device.trim().to_string();
+    if !valid_folder_id(&folder) || !valid_device_id(&device) {
+        return fail_json("文件夹/设备 ID 格式不正确".into());
+    }
+    let res = tokio::task::spawn_blocking(move || -> Result<Value, String> {
+        let agent = st_agent();
+        let key = read_apikey().ok_or("Syncthing API key 不可读（config.xml 缺失）")?;
+        st_call(
+            &agent,
+            &key,
+            "DELETE",
+            &format!("/rest/config/pending/folders/{folder}?device={device}"),
+            None,
+        )?;
+        Ok(ok_json(json!({ "ok": true, "message": format!("已忽略共享文件夹 {folder}") })).0)
+    })
+    .await
+    .unwrap_or_else(|e| Err(format!("dismiss folder task panicked: {e}")));
+
+    match res {
+        Ok(v) => ok_json(v),
+        Err(e) => fail_json(format!("忽略共享文件夹失败：{e}")),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // legacy GET /api/sync (stateless rework of the original handler)
 // ---------------------------------------------------------------------------
 
@@ -764,4 +1283,40 @@ pub async fn sync() -> Json<LegacySync> {
         mirror_src: c.mirror_src.clone(),
         mirror_dst: c.mirror_dst.clone(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn device_id_charset_gate() {
+        // Real/base32-with-dashes ids pass.
+        assert!(valid_device_id("ABC2345ABCDEFGHIJKLMNOPQRSTUVWXYZ23456"));
+        assert!(valid_device_id("XXXXXXX-YYYYZZZ-AAABBBCCC"));
+        assert!(valid_device_id("PHONEA1CEID000000000000000000000000000000000000000000"));
+        // URL-traversal / injection shapes refuse (review P2: only length was checked).
+        assert!(!valid_device_id("SELF/../../admin"));
+        assert!(!valid_device_id("dev?foo=bar"));
+        assert!(!valid_device_id("dev%2f.."));
+        assert!(!valid_device_id("a-b c"));
+        assert!(!valid_device_id("short"));
+        assert!(!valid_device_id(&"A".repeat(65)));
+    }
+
+    #[test]
+    fn folder_id_charset_gate() {
+        assert!(valid_folder_id("flygo-photos"));
+        assert!(valid_folder_id("photos"));
+        assert!(valid_folder_id("my.folder_1"));
+        // Must never escape the sync root or alter the REST endpoint path.
+        assert!(!valid_folder_id(".."));
+        assert!(!valid_folder_id("../evil"));
+        assert!(!valid_folder_id("a/../b"));
+        assert!(!valid_folder_id(".hidden"));
+        assert!(!valid_folder_id("a/b"));
+        assert!(!valid_folder_id(r"a\b"));
+        assert!(!valid_folder_id(""));
+        assert!(!valid_folder_id(&"p".repeat(65)));
+    }
 }

@@ -43,7 +43,7 @@ use std::time::Duration;
 use crate::log::{log_error, log_info, log_warn};
 use crate::{ApiError, ApiResult, AppState};
 
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::winproc::CREATE_NO_WINDOW;
 const STORE_VERSION: u32 = 1;
 /// Prefix for DaemonState child names owned by this module.
 pub const DAEMON_PREFIX: &str = "native:";
@@ -232,7 +232,7 @@ fn under_whitelist(exe: &str, roots: &[std::path::PathBuf]) -> bool {
     let Some(c) = canonical(exe) else {
         return false;
     };
-    roots.iter().any(|r| canonical(r.to_string_lossy().as_ref()).map_or(false, |rc| c.starts_with(&rc)))
+    roots.iter().any(|r| canonical(r.to_string_lossy().as_ref()).is_some_and(|rc| c.starts_with(&rc)))
 }
 
 pub fn validate(sc: &Shortcut, roots: &[std::path::PathBuf]) -> Vec<String> {
@@ -421,9 +421,9 @@ fn needle_pids(needle: &str) -> Vec<u32> {
         // Working directory: pins an interpreter to its project dir.
         let cwd = p.cwd().map(|c| c.to_string_lossy().into_owned().to_lowercase());
         if name.contains(&needle_l)
-            || exe.map_or(false, |e| e.contains(&needle_l))
+            || exe.is_some_and(|e| e.contains(&needle_l))
             || cmd.contains(&needle_l)
-            || cwd.map_or(false, |c| c.contains(&needle_l))
+            || cwd.is_some_and(|c| c.contains(&needle_l))
         {
             pids.push(pid.as_u32());
         }

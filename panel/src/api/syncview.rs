@@ -412,7 +412,7 @@ mod tests {
             return;
         }
         // The engine is up, but its config.xml may live outside the
-        // platform-default homes this test can see (e.g. a FengNAS or
+        // platform-default homes this test can see (e.g. a FlyGoLegacy or
         // winget-managed install). No readable apikey -> skip, same as down.
         let Some(key) = read_apikey() else {
             eprintln!("SKIP live_overview_collect: config.xml/apikey not readable");
@@ -421,9 +421,9 @@ mod tests {
         let ov = collect_overview(&key).expect("overview collected");
         eprintln!("LIVE OVERVIEW:\n{}", serde_json::to_string_pretty(&ov).unwrap());
         assert!(ov.syncthing_reachable, "syncthing must be reachable");
-        assert!(ov.devices.len() >= 1, "at least one device");
+        assert!(!ov.devices.is_empty(), "at least one device");
         assert!(
-            ov.my_id.as_deref().map(|s| !s.is_empty()).unwrap_or(false),
+            ov.my_id.as_deref().is_some_and(|s| !s.is_empty()),
             "my id must be present"
         );
     }

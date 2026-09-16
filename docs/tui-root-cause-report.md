@@ -1,7 +1,7 @@
 # TUI 应用不可用 —— 根因诊断 + 开源成熟方案调研报告
 
 - 日期：2026-08-16
-- 范围：`C:\FengProj\FlyGo\webcli`（独立 Rust crate，v0.3.1）、`panel/src/api/term.rs` 与面板前端、`panel/src/daemon.rs`（webcli 托管）、便携式依赖 `portable-pty 0.8.1`（本机 cargo registry 实读源码）
+- 范围：`C:\FlyGoLegacy\webcli`（独立 Rust crate，v0.3.1）、`panel/src/api/term.rs` 与面板前端、`panel/src/daemon.rs`（webcli 托管）、便携式依赖 `portable-pty 0.8.1`（本机 cargo registry 实读源码）
 - 方式：纯静态读代码 + 官方文档/源码/issue 调研，未安装、未运行、未改动任何代码
 - 现象：**TUI 类应用（htop、vim、btop、lazygit 等全屏交互式程序）在网页终端完全不能用，普通命令行正常**
 
@@ -162,12 +162,12 @@ ws.onmessage = function (ev) {
 
 ## 附：关键证据索引
 
-- webcli：`C:\FengProj\FlyGo\webcli\src\main.rs`（Binary 帧 238 行、resize 281-287、chcp 192-197）
-- 独立页缺陷：`C:\FengProj\FlyGo\webcli\static\index.html` 232-237 行
-- 面板代理：`C:\FengProj\FlyGo\panel\src\api\term.rs` ax2tw/tw2ax 299-326 行
-- 面板前端：`C:\FengProj\FlyGo\panel\static\index.html` 1202-1211（Blob→write）、1112-1129（fit/resize）
-- daemon 托管：`C:\FengProj\FlyGo\panel\src\daemon.rs` 584-654（CREATE_NO_WINDOW，无 TERM_SHELL → cmd.exe）
-- portable-pty 0.8.1 源码：`C:\Users\<user>\.cargo\registry\src\rsproxy.cn-*/portable-pty-0.8.1\src\win\{conpty,psuedocon,procthreadattr}.rs`
+- webcli：`C:\FlyGoLegacy\webcli\src\main.rs`（Binary 帧 238 行、resize 281-287、chcp 192-197）
+- 独立页缺陷：`C:\FlyGoLegacy\webcli\static\index.html` 232-237 行
+- 面板代理：`C:\FlyGoLegacy\panel\src\api\term.rs` ax2tw/tw2ax 299-326 行
+- 面板前端：`C:\FlyGoLegacy\panel\static\index.html` 1202-1211（Blob→write）、1112-1129（fit/resize）
+- daemon 托管：`C:\FlyGoLegacy\panel\src\daemon.rs` 584-654（CREATE_NO_WINDOW，无 TERM_SHELL → cmd.exe）
+- portable-pty 0.8.1 源码：`~/.cargo/registry/src/rsproxy.cn-*/portable-pty-0.8.1\src\win\{conpty,psuedocon,procthreadattr}.rs`
 - ConPTY 官方实现：microsoft/terminal `src/winconpty/winconpty.cpp`、`src/host/VtInputThread.cpp`、`src/terminal/parser/InputStateMachineEngine.cpp`
 - 微软 issue：#9446（chcp 清屏，open）、#12166（ConPTY 修改输入转义序列）、#16343（WIN32_INPUT_MODE 破坏 WSL interop / ReadConsoleInputW 应用）
 - ttyd：#1501（Win11 25H2 MinGW 构建失败）、#1502（MSVC 构建支持）

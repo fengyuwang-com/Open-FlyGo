@@ -163,7 +163,7 @@
 ```
 FENGPAGE_CONFIG（env，显式指定文件）        ← 最高优先
   > 安装根/config/flygo.toml                ← 新默认位置（config.rs 已能 detect_root）
-  > legacy C:/FengNAS/flygo.toml（存在则读） ← 老部署无感迁移
+  > legacy C:/FlyGoLegacy/flygo.toml（存在则读） ← 老部署无感迁移
   > 无文件 → 全部用内置默认值（= 当前硬编码）
 ```
 

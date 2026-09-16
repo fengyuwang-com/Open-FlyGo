@@ -268,14 +268,14 @@ mod tests {
     fn apply_script_has_expected_shape() {
         let entries = firewall_entries(&[5244, 5005], "100.64.0.0/10");
         let script = build_apply_script(
-            "100.123.90.16",
+            "100.101.102.103",
             &[5244, 5005],
             &entries,
             std::path::Path::new(r"C:\T\flygo_access_op.txt"),
         );
         assert!(script.contains("Remove-NetFirewallRule"));
         assert!(script.contains("localport=5244,5005"));
-        assert!(script.contains("listenaddress=100.123.90.16"));
+        assert!(script.contains("listenaddress=100.101.102.103"));
         assert!(script.contains("connectport=5005"));
         assert!(script.contains("[IO.File]::WriteAllText"));
         assert!(script.contains("RESULT=OK docknet-applied; ports=5244,5005"));

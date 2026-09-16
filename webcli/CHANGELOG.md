@@ -8,7 +8,7 @@
   全部 404 → 浏览器 `Terminal is not defined` 黑屏。新增 fallback 静态文件路由
   （`rust-embed` 内嵌文件按扩展名配 Content-Type），终端页面恢复正常
 - 验证：无头浏览器实测 `/vendor/xterm/xterm.js` 等 200，ConPTY 会话出现
-  cmd 提示符（`C:\Users\<user>>`）
+  cmd 提示符（`~
 
 ## 0.3.0（2026-08-16）
 - **从 Python 重写为 Rust 单二进制**：axum + tokio + portable-pty（ConPTY）后端，

@@ -11,7 +11,7 @@
 | 项 | 现状 |
 |---|---|
 | WSL 版本 | 2.6.3.0（kernel 6.6.87.2-1），Store 版，足够新 |
-| 业务分发版 | Ubuntu-24.04（dockerd 由 systemd 托管，compose 项目在 /mnt/c/FengNAS） |
+| 业务分发版 | Ubuntu-24.04（dockerd 由 systemd 托管，compose 项目在 /mnt/c/FlyGoLegacy） |
 | .wslconfig | `memory=6GB` `vmIdleTimeout=6000000`（100 分钟）`autoMemoryReclaim=gradual` |
 | 保活现状 | 外部计划任务 **WSLKeepAlive**（Logon + Time 触发）→ `~/wsl_keepalive.ps1` 常驻 2 个 `wsl -d Ubuntu-24.04 -u root -- bash` 会话 |
 | 面板现状 | `dockerctl.rs` 已有 `wsl_vm_running()`（只查 vmmemWSL 进程，**不唤醒原则**）、全局串行锁、超时杀树；`daemon.rs` 已有 USB 守卫线程模式可复用 |
@@ -50,7 +50,7 @@ EXE 启动时在**后台线程**执行（不阻塞 8388 端口就绪），按序
 │     仅当 VM 在跑：wsl -d Ubuntu-24.04 -u root -- systemctl is-active docker
 │     非 active 且目标态=开 → systemctl start docker（120s 超时，复用 ACTION_TIMEOUT 模式）
 ├─ 5) 容器
-│     docker ps -a 对比期望清单（compose 项目 /mnt/c/FengNAS）→ 缺/退出 → docker compose up -d
+│     docker ps -a 对比期望清单（compose 项目 /mnt/c/FlyGoLegacy）→ 缺/退出 → docker compose up -d
 └─ 6) 结果上报
       每步 ✓/✗ 写入面板「自检日志」+ 状态卡（一键修复按钮，见 §3）
 ```
@@ -102,7 +102,7 @@ autoMemoryReclaim=gradual
 
 1. 部署新版 EXE，确认「引擎保活」工作：面板「引擎 开」→ WSL 状态卡显示"保活中"；**重启面板 EXE 后** VM 仍在或自检自动恢复（关键验收点）。
 2. 面板「计划任务治理」识别到 `WSLKeepAlive`（Logon/Time 触发，执行 `wsl_keepalive.ps1`）。
-3. 一键删除：`schtasks /delete /tn WSLKeepAlive /f`；脚本 `~/wsl_keepalive.ps1` 先 `cp` 备份到 `C:\FengProj\FlyGo\scripts\backup\` 再删除。
+3. 一键删除：`schtasks /delete /tn WSLKeepAlive /f`；脚本 `~/wsl_keepalive.ps1` 先 `cp` 备份到 `C:\FlyGoLegacy\scripts\backup\` 再删除。
 4. 验收：重启电脑 → 面板自启 → 自检拉保活 → VM 存活、容器正常、无外部任务依赖。
 5. 回滚：备份脚本还在；面板异常时重新注册任务即可（迁移全程可逆）。
 

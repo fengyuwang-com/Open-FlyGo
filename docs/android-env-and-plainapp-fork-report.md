@@ -2,7 +2,7 @@
 
 > 日期：2026-08-16 · 性质：纯调研（只读检查，未装任何东西、未改任何代码、未提交 git）
 > 源码版本：PlainApp **v3.3.2**（仓库 `ismartcoding/plain-app`，现已更名 `plainhub/plain-app`；两个地址的 v3.3.2 tag 内容一致）
-> 源码获取方式：**GitHub 网页/raw 直连分析**（`C:\FengProj\PlainApp` 的并行克隆尚未完成，为避免抢克隆操作未使用本地目录；另有本地副本 `C:\Users\<user>\AppData\Local\Temp\plainapp-research\plain-app` 可参考）
+> 源码获取方式：**GitHub 网页/raw 直连分析**（`~/PlainApp` 的并行克隆尚未完成，为避免抢克隆操作未使用本地目录；另有本地副本 `~/AppData/Local/Temp/plainapp-research/plain-app` 可参考）
 
 ---
 
@@ -10,9 +10,9 @@
 
 | 项目 | 状态 | 详细 |
 |---|---|---|
-| Java | ✅ 有，但版本偏高 | `java -version` = **OpenJDK 25.0.1 LTS**（Oracle，位于 `C:\Program Files\Java\jdk-25`）；`javac 25.0.1` 可用。**JAVA_HOME 未设置**（空）。无 Adoptium / Android Studio jbr / FengNAS 下的 JDK。路径入口：`C:\Program Files\Common Files\Oracle\Java\javapath` |
-| Gradle | ❌ 无 | `gradle` 命令不存在；`C:\Users\<user>\.gradle` **不存在**（无 wrapper 分发缓存、无依赖缓存，一切从零下载）。仓库自带 `gradlew`/`gradlew.bat`（wrapper 指向 **Gradle 9.7.0**），首次构建会自动下载 ~140MB 分发包 |
-| Android SDK | ❌ 完全没有 | `ANDROID_HOME` / `ANDROID_SDK_ROOT` 均未设置；`C:\Users\<user>\AppData\Local\Android\Sdk`、`C:\Android\sdk` 均不存在；**D 盘不存在**。无 cmdline-tools、无 platform-tools/adb、无任何 platforms/build-tools |
+| Java | ✅ 有，但版本偏高 | `java -version` = **OpenJDK 25.0.1 LTS**（Oracle，位于 `C:\Program Files\Java\jdk-25`）；`javac 25.0.1` 可用。**JAVA_HOME 未设置**（空）。无 Adoptium / Android Studio jbr / FlyGoLegacy 下的 JDK。路径入口：`C:\Program Files\Common Files\Oracle\Java\javapath` |
+| Gradle | ❌ 无 | `gradle` 命令不存在；`~/.gradle` **不存在**（无 wrapper 分发缓存、无依赖缓存，一切从零下载）。仓库自带 `gradlew`/`gradlew.bat`（wrapper 指向 **Gradle 9.7.0**），首次构建会自动下载 ~140MB 分发包 |
+| Android SDK | ❌ 完全没有 | `ANDROID_HOME` / `ANDROID_SDK_ROOT` 均未设置；`~/AppData/Local/Android/Sdk`、`C:\Android\sdk` 均不存在；**D 盘不存在**。无 cmdline-tools、无 platform-tools/adb、无任何 platforms/build-tools |
 | Kotlin / IDE | ❌ 无 | 无独立 `kotlinc`；Android Studio 未安装（`C:\Program Files\Android\` 存在但为空目录）。编译不依赖 AS，但缺 SDK 组件需用 cmdline-tools 的 sdkmanager 补 |
 | 磁盘 | ✅ 充足 | C 盘 476G 总量，**剩余 109G**，78% 占用 |
 | 内存/CPU | ⚠️ 需注意 | **内存仅 15.4G**（当前空闲 ~5.8G），CPU AMD Ryzen 7 5800H（8C/16T）。**PlainApp 的 `gradle.properties` 写死 `-Xmx12g -XX:MaxMetaspaceSize=2g` + kotlin daemon `-Xmx6g`，在本机必 OOM，需下调**（建议 `-Xmx4g` / kotlin daemon `-Xmx2g`） |
@@ -85,7 +85,7 @@
 - 唯一的"节点互连"是近场 P2P：BLE / Wi-Fi Aware / Wi-Fi Direct + mDNS（`plainapp.local`）聊天与传文件（`PeerGraphQLService`），不走 HTTPS。
 - 对 FlyGo 的意义：**"让手机访问面板/其他节点"是差异化空白**，需要二期新增（见 d）。
 
-#### d. 深度连接潜力（与 FlyGo 面板 http://192.168.1.151:8388 互通）
+#### d. 深度连接潜力（与 FlyGo 面板 http://192.168.1.50:8388 互通）
 
 现有可复用扩展点：
 
@@ -114,7 +114,7 @@
 | 内存配置 | 改 `gradle.properties`：`-Xmx12g`→`-Xmx4g`、`-XX:MaxMetaspaceSize=2g`→`1g`、kotlin daemon `-Xmx6g`→`2g`（16G 内存必调） | 1 分钟 |
 | JAVA_HOME | 建议设 `JAVA_HOME=C:\Program Files\Java\jdk-25`（Gradle 9.7 支持 JDK 25 运行；编译 target 17 由 JDK25 向下兼容）；daemon 工具链 21 由 foojay 插件自动拉取（api.foojay.io 可达） | 1 分钟 |
 | debug 签名 | `~/.android/debug.keystore` **已存在**，无需处理 | 0 |
-| 源码 | `C:\FengProj\PlainApp` 克隆进行中（已 75MB/未完成）；或直接用 `C:\Users\<user>\AppData\Local\Temp\plainapp-research\plain-app` 副本；或 `gh api` tarball 直连 | — |
+| 源码 | `~/PlainApp` 克隆进行中（已 75MB/未完成）；或直接用 `~/AppData/Local/Temp/plainapp-research/plain-app` 副本；或 `gh api` tarball 直连 | — |
 
 合计：**环境就绪约 0.5–1 小时**（纯下载等待，可后台）。
 

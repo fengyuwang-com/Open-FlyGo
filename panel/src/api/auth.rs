@@ -40,7 +40,7 @@ use serde::Deserialize;
 use serde_json::json;
 use std::{
     collections::HashMap,
-    sync::{Arc, LazyLock, Mutex},
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -337,6 +337,7 @@ pub async fn status(State(auth): State<AuthState>, headers: HeaderMap) -> Json<s
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::LazyLock;
 
     #[test]
     fn expiry_predicate_is_inclusive() {
@@ -402,6 +403,6 @@ mod tests {
             "expired entry is dropped on lookup"
         );
         st.drop_session(&tok); // no-op, must not panic
-        let _ = &EMPTY_SESSIONS; // keep the LazyLock import exercised
+        let _ = &EMPTY_SESSIONS;
     }
 }

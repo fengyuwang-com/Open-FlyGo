@@ -131,7 +131,7 @@ impl SectionCache {
 /// counts as stale instead of panicking.
 fn fresh_at(entry: Option<(&Instant, &Value)>, ttl: Duration, now: Instant) -> bool {
     match entry {
-        Some((at, _)) => ttl > Duration::ZERO && now.checked_duration_since(*at).map_or(false, |d| d < ttl),
+        Some((at, _)) => ttl > Duration::ZERO && now.checked_duration_since(*at).is_some_and(|d| d < ttl),
         None => false,
     }
 }

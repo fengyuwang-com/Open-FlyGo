@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// CREATE_NO_WINDOW: keep the restarted instance from flashing a console.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::winproc::CREATE_NO_WINDOW;
 
 /// 总请求数 / 总错误数（>=400 计为错误，连接层错误单独计）
 pub static REQUESTS: AtomicU64 = AtomicU64::new(0);
@@ -69,10 +69,6 @@ fn default_flags() -> HashMap<String, bool> {
     m.insert("feature.auto_retry".to_string(), true);
     m.insert("feature.usb_eject".to_string(), true);
     m
-}
-
-pub fn flag_enabled(key: &str) -> bool {
-    FLAGS.lock().map(|m| *m.get(key).unwrap_or(&true)).unwrap_or(true)
 }
 
 /// 特性开关统一入口：GET 读全量，POST 写单个
@@ -161,7 +157,7 @@ pub async fn stats() -> ApiResult<Json<StatsOut>> {
     let by_route = BY_ROUTE.lock()
         .map(|m| {
             let mut v: Vec<RouteStat> = m.iter().map(|(k, c)| RouteStat { route: k.clone(), count: *c }).collect();
-            v.sort_by(|a, b| b.count.cmp(&a.count));
+            v.sort_by_key(|s| std::cmp::Reverse(s.count));
             v
         })
         .unwrap_or_default();

@@ -840,6 +840,12 @@ try{bootPoll();}catch(e){}
         <div id="sync2-link-list"></div>
         <div id="sync2-empty" class="dim" style="font-size:.75rem;line-height:1.7" hidden></div>
       </div>
+      <!-- ②b 待配对手机：轮询 Syncthing pending，一键接受/忽略，接受后可一步建共享文件夹 -->
+      <div class="panel" id="sync2-pending-card" hidden>
+        <div class="phead"><span data-i18n="sync2.pendT">待配对手机</span> <span class="sub" id="sync2-pending-sub"></span><span class="sp"></span><button class="btn off" id="sync2-pending-refresh" title="刷新"><span data-i18n="btn.refresh">↻ 刷新</span></button></div>
+        <div id="sync2-pending-list" style="display:flex;flex-direction:column;gap:.45rem"></div>
+        <div class="dim" style="font-size:.68rem;line-height:1.6;margin-top:.55rem" data-i18n="sync2.pendNote">手机 Syncthing-Fork 扫「手机接入」页二维码后，配对请求会出现在这里；接受设备后可一键创建共享文件夹（手机只收不发）。</div>
+      </div>
       <!-- ③ 新增同步：三步向导（选文件夹 → 选目标 → 完成） -->
       <div class="panel" id="sync2-wiz" hidden>
         <div class="phead"><span data-i18n="sync2.wiz">新增同步</span> <span class="sub" data-i18n="sync2.wizSub">选文件夹 → 选目标 → 完成</span><span class="sp"></span><button class="btn off" id="sync2-wiz-close"><span data-i18n="btn.close">关闭</span></button></div>
@@ -1099,7 +1105,7 @@ try{bootPoll();}catch(e){}
             <label class="ac-lab">参数（每行一个）</label>
             <textarea id="nat-args" class="tinput" rows="2" placeholder="如 dist/index.js"></textarea>
             <label class="ac-lab">工作目录（可选，默认程序所在目录）</label>
-            <input id="nat-workdir" class="tinput" placeholder="如 C:\FengProj\FengInvest\fengweb">
+            <input id="nat-workdir" class="tinput" placeholder="如 C:\projects\myapp">
           </div>
           <div id="nat-url-row" hidden>
             <label class="ac-lab">链接地址</label>
@@ -1120,7 +1126,7 @@ try{bootPoll();}catch(e){}
       <div class="panel"><div class="phead">白名单 <span class="sub">exe/script 只允许这些目录下运行（默认=面板安装根）</span></div>
         <div id="nat-roots" class="dim" style="font-size:.75rem">加载中…</div>
         <div style="display:flex;gap:.55rem;align-items:center;flex-wrap:wrap;margin-top:.55rem">
-          <input id="nat-root-add" class="tinput" placeholder="如 C:\FengProj" style="flex:1;min-width:220px">
+          <input id="nat-root-add" class="tinput" placeholder="如 ~" style="flex:1;min-width:220px">
           <button class="btn on" id="nat-root-btn" type="button">添加目录</button>
           <span id="nat-root-msg" style="font-size:.75rem"></span>
         </div>
@@ -1210,7 +1216,7 @@ I18N.zh={
   'fs.fs':'⛶ 全屏','fs.exit':'✕ 退出全屏','fs.open':'↗ 在新标签页打开','fs.start':'🚀 启动引擎并打开',
   'st.wait1':'正在启动（首次约需 10~30 秒）…','st.wait2':'正在启动（冷启动约需 30~60 秒）…','st.wait':'正在启动（{t}）…','st.fail1':'服务未启动，可一键启动（首次约需 10~30 秒）','st.fail2':'服务未启动，可一键启动（冷启动约需 30~60 秒）','st.failmsg':'服务未启动，可一键启动（{t}）','st.starting':'正在启动，请稍候…','st.enginefail':'引擎启动失败','st.ctnfail':'容器启动失败','st.bootfail':'启动失败：{m}','st.portfail':'服务已运行，但端口访问不通（可能是端口转发问题）','st.timeout':'启动超时（90 秒），请到『容器』页查看状态后重试',
   'tray.running':'运行中','tray.stopped':'已停止','tray.timer':'同步定时器','tray.timerOn':'开启','tray.timerOff':'关闭','tray.lastRun':'上次','tray.usb':'外置盘','tray.usbOn':'在线','tray.usbOff':'已弹出','tray.err':'状态获取失败','tray.gotray':'到「管家组件」',
-  'sync2.st':'同步状态','sync2.timer':'镜像定时器','sync2.devices':'设备连接','sync2.mirrorLast':'最近镜像','sync2.links':'同步链路','sync2.add':'➕ 新增同步','sync2.wiz':'新增同步','sync2.wizSub':'选文件夹 → 选目标 → 完成','sync2.s1':'选文件夹','sync2.s2':'选目标','sync2.s3':'完成','sync2.folderLab':'本机文件夹（绝对路径）','sync2.folderPh':'D:\\Photos（示例）','sync2.quick':'常见目录：','sync2.tgMirror':'本地镜像','sync2.tgMirrorD':'同机另一块盘保存完整副本，防单盘损坏','sync2.tgMirrorDst':'D:\\Mirror\\Photos（示例）','sync2.tgDev':'其他设备','sync2.tgDevD':'经 Syncthing 与手机/电脑双向同步，自动保留历史版本','sync2.tgDevSelf':'仅本机登记（暂无已配对设备）','sync2.tgManual':'手动指引','sync2.tgManualD':'按步骤自行配置，面板只记录链路','sync2.pick':'选择','sync2.picked':'已选择','sync2.prev':'← 上一步','sync2.next':'下一步 →','sync2.create':'创建同步','sync2.creating':'创建中…','sync2.done':'同步已创建','sync2.engineNote':'同步方式由引擎自动处理：多向同步、冲突与历史版本自动保留，无需手动配置。','sync2.again':'再建一条','sync2.needFolder':'请填写本地文件夹的绝对路径（如 D:\\Photos，示例）','sync2.needTarget':'请选择一个同步目标','sync2.needDst':'请填写镜像目标（如 D:\\Mirror\\Photos，示例）','sync2.stdown':'Syncthing 未运行——无法创建设备同步。可先在「总览 → 管家组件」启动，或改选本地镜像。','sync2.noDev':'尚未配对其他设备；可到「手机接入」页扫码配对，或先仅本机登记。','sync2.empty':'还没有同步链路。点「新增同步」，三步完成：选本机文件夹 → 选目标（本地镜像 / 其他设备 / 手动指引）→ 完成。','sync2.errfail':'加载失败：','sync2.degraded':'Syncthing 未运行——设备同步与链路状态不可用（可在「总览 → 管家组件」启动）；镜像定时器不受影响。','sync2.on':'开启','sync2.off':'关闭','sync2.lastRun':'上次','sync2.never':'从未运行','sync2.logNone':'暂无镜像日志','sync2.mirrorNA':'未配置','sync2.devN':'在线 {a} / 共 {b}','sync2.kindMirror':'镜像','sync2.kindDev':'设备','sync2.kindManual':'手动','sync2.resOk':'已同步','sync2.resWarn':'同步中','sync2.resErr':'异常','sync2.resNone':'已登记','sync2.resOffline':'引擎离线','sync2.resManual':'手动','sync2.resWaitMirror':'待镜像执行','sync2.del':'删除','sync2.delconfirm':'删除同步链路「{n}」？\n仅移除面板里的链路记录；设备同步会尝试一并从 Syncthing 移除（不会删除任何文件）。','sync2.selfMark':'（本机）','sync2.online':'在线','sync2.offline':'离线','sync2.guideTitle':'手动配置指引','sync2.g1':'1. 在目标设备上安装 Syncthing（手机装 Syncthing-Fork，见「手机接入」页）。','sync2.g2':'2. 两边互相添加设备（本机设备 ID 见「手机接入」页二维码）。','sync2.g3':'3. 两边把该文件夹加入共享，类型选「发送与接收」，建议开启版本控制。','sync2.g4':'4. 回到本页确认链路状态点亮。',
+  'sync2.st':'同步状态','sync2.timer':'镜像定时器','sync2.devices':'设备连接','sync2.mirrorLast':'最近镜像','sync2.links':'同步链路','sync2.add':'➕ 新增同步','sync2.wiz':'新增同步','sync2.wizSub':'选文件夹 → 选目标 → 完成','sync2.s1':'选文件夹','sync2.s2':'选目标','sync2.s3':'完成','sync2.folderLab':'本机文件夹（绝对路径）','sync2.folderPh':'D:\\Photos（示例）','sync2.quick':'常见目录：','sync2.tgMirror':'本地镜像','sync2.tgMirrorD':'同机另一块盘保存完整副本，防单盘损坏','sync2.tgMirrorDst':'D:\\Mirror\\Photos（示例）','sync2.tgDev':'其他设备','sync2.tgDevD':'经 Syncthing 与手机/电脑双向同步，自动保留历史版本','sync2.tgDevSelf':'仅本机登记（暂无已配对设备）','sync2.tgManual':'手动指引','sync2.tgManualD':'按步骤自行配置，面板只记录链路','sync2.pick':'选择','sync2.picked':'已选择','sync2.prev':'← 上一步','sync2.next':'下一步 →','sync2.create':'创建同步','sync2.creating':'创建中…','sync2.done':'同步已创建','sync2.engineNote':'同步方式由引擎自动处理：多向同步、冲突与历史版本自动保留，无需手动配置。','sync2.again':'再建一条','sync2.needFolder':'请填写本地文件夹的绝对路径（如 D:\\Photos，示例）','sync2.needTarget':'请选择一个同步目标','sync2.needDst':'请填写镜像目标（如 D:\\Mirror\\Photos，示例）','sync2.stdown':'Syncthing 未运行——无法创建设备同步。可先在「总览 → 管家组件」启动，或改选本地镜像。','sync2.noDev':'尚未配对其他设备；可到「手机接入」页扫码配对，或先仅本机登记。','sync2.empty':'还没有同步链路。点「新增同步」，三步完成：选本机文件夹 → 选目标（本地镜像 / 其他设备 / 手动指引）→ 完成。','sync2.errfail':'加载失败：','sync2.degraded':'Syncthing 未运行——设备同步与链路状态不可用（可在「总览 → 管家组件」启动）；镜像定时器不受影响。','sync2.on':'开启','sync2.off':'关闭','sync2.lastRun':'上次','sync2.never':'从未运行','sync2.logNone':'暂无镜像日志','sync2.mirrorNA':'未配置','sync2.devN':'在线 {a} / 共 {b}','sync2.kindMirror':'镜像','sync2.kindDev':'设备','sync2.kindManual':'手动','sync2.resOk':'已同步','sync2.resWarn':'同步中','sync2.resErr':'异常','sync2.resNone':'已登记','sync2.resOffline':'引擎离线','sync2.resManual':'手动','sync2.resWaitMirror':'待镜像执行','sync2.del':'删除','sync2.delconfirm':'删除同步链路「{n}」？\n仅移除面板里的链路记录；设备同步会尝试一并从 Syncthing 移除（不会删除任何文件）。','sync2.selfMark':'（本机）','sync2.online':'在线','sync2.offline':'离线','sync2.guideTitle':'手动配置指引','sync2.g1':'1. 在目标设备上安装 Syncthing（手机装 Syncthing-Fork，见「手机接入」页）。','sync2.g2':'2. 两边互相添加设备（本机设备 ID 见「手机接入」页二维码）。','sync2.g3':'3. 两边把该文件夹加入共享，类型选「发送与接收」，建议开启版本控制。','sync2.g4':'4. 回到本页确认链路状态点亮。','sync2.pendT':'待配对手机','sync2.pendN':'{a} 台设备 / {b} 个共享','sync2.pendNote':'手机 Syncthing-Fork 扫「手机接入」页二维码后，配对请求会出现在这里；接受设备后可一键创建共享文件夹（手机只收不发）。','sync2.pendAccept':'接受','sync2.pendDismiss':'忽略','sync2.pendFrom':'来自 {d}…','sync2.dirSend':'电脑→手机','sync2.dirRecv':'手机→电脑','sync2.dirBoth':'双向','sync2.share':'共享给…','sync2.shareHint':'勾选设备后确认共享；两台手机都共享同一文件夹并各自在 Syncthing-Fork 中接受后，即可经这台电脑互相同步。','sync2.shareGo':'确认共享','sync2.shareNone':'请先勾选至少一台设备',
   'edit.title':'组件编辑','edit.sub':'保存到 data/components.json · 改动即时生效、重启不丢','edit.close':'✕ 关闭','edit.save':'💾 保存到磁盘','edit.reset':'↺ 恢复默认','edit.cancel':'取消',
   'edit.sec.nav':'导航项（label/icon/target/sort/hidden）','edit.sec.tiles':'顶栏图标（type=action/service-light）','edit.sec.cards':'服务卡片（compose 动态解析 + 用户覆盖）','edit.sec.frames':'iframe 页（url 支持 ${FENG_IP}）',
   'edit.f.label':'名称','edit.f.icon':'图标','edit.f.target':'目标','edit.f.sort':'排序','edit.f.hidden':'隐藏','edit.f.type':'类型','edit.f.action':'动作','edit.f.service':'服务key','edit.f.name':'名称','edit.f.desc':'描述','edit.f.url':'URL','edit.f.port':'端口','edit.f.title':'标题','edit.f.container':'容器key','edit.f.boot_hint':'启动提示','edit.f.removed':'删除',
@@ -1225,7 +1231,7 @@ I18N.zh={
   'load.fail':'加载失败','load.unknown':'未知原因','load.auto15':'（15 秒后自动重试）',
   'ast.nonestart':'无自启动项','ast.none':'无',
   'syncnet.offline':'Syncthing 未运行或不可达（可在「总览 → 管家组件」中启动）','syncnet.online':'Syncthing 在线 · {d} 台设备 · {f} 个文件夹','syncnet.devsub':'{a}/{b} 在线','syncnet.fldsub':'{f} 个文件夹 · 共 {r} 设备份','syncnet.errfail':'同步网络加载失败：','syncnet.fail':'加载失败','syncnet.emptydev':'无设备','syncnet.emptyfld':'无文件夹','syncnet.synced':'已同步','syncnet.syncing':'同步中','syncnet.onself':'本机','syncnet.replica':'{n} 副本','syncnet.files':'{n} 个文件 / 全局 {m}','syncnet.pending':'待同步 {n} 个','syncnet.unnamed':'未命名','syncnet.na':'无数据',
-  'p.control':'控制面','ctl.onoff':'🚀 控制面上报','ctl.enable':'启用','ctl.disable':'停用','ctl.enabled':'已启用','ctl.disabled':'未启用','ctl.url':'控制面地址','ctl.device':'设备名称','ctl.state':'订阅状态','ctl.st.un':'未激活','ctl.st.trial':'试用期','ctl.st.active':'生效中','ctl.st.expiring':'即将到期','ctl.st.expired':'已过期','ctl.st.cancelled':'已取消','ctl.expires':'到期','ctl.never':'—','ctl.hb':'上次心跳','ctl.hbnever':'暂无心跳','ctl.unreach':'控制面不可达','ctl.retrynow':'↻ 立即重试','ctl.retrying':'重试中…','ctl.retry.ok':'✔ 心跳成功','ctl.retry.off':'控制面上报未启用，无法重试','ctl.failcnt':'心跳失败 {n} 次','ctl.nextretry':'下次重试 {s}s 后','ctl.up.title':'最近上传','ctl.up.empty':'暂无上传','ctl.up.repeated':'重试去重','ctl.register':'📋 注册设备','ctl.activate':'✅ 激活','ctl.copy':'📋 复制激活码','ctl.copied':'✔ 已复制','ctl.nocode':'尚无激活码','ctl.registered':'注册成功，激活码：','ctl.activated':'激活成功：','ctl.saved':'✔ 已保存（下次心跳生效）','ctl.fail':'操作失败：','ctl.err':'控制面状态获取失败','ctl.hw':'硬件 ID',
+  'p.control':'控制面','ctl.onoff':'🚀 控制面上报','ctl.enable':'启用','ctl.disable':'停用','ctl.enabled':'已启用','ctl.disabled':'未启用','ctl.url':'控制面地址','ctl.device':'设备名称','ctl.state':'订阅状态','ctl.st.un':'未激活','ctl.st.trial':'试用期','ctl.st.active':'生效中','ctl.st.expiring':'即将到期','ctl.st.expired':'已过期','ctl.st.cancelled':'已取消','ctl.expires':'到期','ctl.never':'—','ctl.hb':'上次心跳','ctl.hbnever':'暂无心跳','ctl.hb.ok':'✔','ctl.hb.fail':'✘ 失败','ago.now':'刚刚','ago.min':'{n} 分钟前','ago.hour':'{n} 小时前','ago.day':'{n} 天前','ctl.unreach':'控制面不可达','ctl.retrynow':'↻ 立即重试','ctl.retrying':'重试中…','ctl.retry.ok':'✔ 心跳成功','ctl.retry.off':'控制面上报未启用，无法重试','ctl.failcnt':'心跳失败 {n} 次','ctl.nextretry':'下次重试 {s}s 后','ctl.up.title':'最近上传','ctl.up.empty':'暂无上传','ctl.up.repeated':'重试去重','ctl.register':'📋 注册设备','ctl.activate':'✅ 激活','ctl.copy':'📋 复制激活码','ctl.copied':'✔ 已复制','ctl.nocode':'尚无激活码','ctl.registered':'注册成功，激活码：','ctl.activated':'激活成功：','ctl.saved':'✔ 已保存（下次心跳生效）','ctl.fail':'操作失败：','ctl.err':'控制面状态获取失败','ctl.codeph':'请先输入激活码（8 位，如 ABCD-2345）','ctl.badfmt':'激活码格式无效：应为 8 位字符（不含 0/O/1/I），可带连字符或空格','ctl.hw':'硬件 ID',
   'nav.pair':'互备','p.pair':'互备','pair.invite':'发起互备','pair.invite.hint':'本机生成 6 位邀请码，在对端节点的「互备」页输入即完成配对（需两边都已激活控制面）。','pair.code':'邀请码（10 分钟内有效）','pair.copycode':'📋 复制邀请码','pair.copied':'✔ 已复制','pair.create':'🤝 生成邀请码','pair.join':'加入互备','pair.join.hint':'拿到对端邀请码后在此输入，双方自动互加 Syncthing 设备并直连。','pair.join.ph':'123456','pair.join.btn':'✅ 加入','pair.ttl':'剩余 {m} 分 {s} 秒','pair.expired':'邀请码已过期，请重新生成','pair.created':'邀请码已生成。对端输入后，本页自动变为已配对（约 5 秒内）。','pair.joining':'正在验证邀请码并互加设备…','pair.joined':'配对完成：已互加 Syncthing 设备。','pair.peer':'对端节点','pair.peer.online':'在线','pair.peer.offline':'离线','pair.peer.lastseen':'上次活动 {s} 秒前','pair.peer.neverseen':'从未连接','pair.peer.errors':'连续探测失败 {n} 次','pair.peer.healtherr':'健康数据不可用','pair.unpaired':'未配对——任选一张卡片开始（生成邀请码 / 输对端码）','pair.pairedsub':'已配对','pair.dirs':'互备目录','pair.dirs.sub':'勾选要互备的目录','pair.dirs.empty':'本机尚无同步文件夹——先在 Syncthing 建好目录后再来勾选，或稍后刷新。','pair.enable':'🔁 开启互备','pair.enable.hint':'开启后所选目录按「发送并接收」双向同步，并强制开启 staggered 版本控制：被删除或覆盖的文件保留 7 天内的历史版本（maxAge=604800 秒、7 天清理周期），7 天内可从对端 .stversions 恢复。删除操作会同步到对端——对端同样留有 7 天版本窗口兜底。','pair.enable.doing':'正在下发文件夹配置…','pair.enable.none':'请先勾选至少一个目录','pair.enable.done':'已开启互备：成功 {n} 个目录','pair.enable.partial':'部分成功：成功 {ok} / 共 {n} 个目录','pair.enable.fail':'全部失败：','pair.recover':'恢复进度','pair.recover.hint':'节点换新/重装后：激活并在互备页勾选原目录，Syncthing 自动从对端拉回数据，此页按目录显示剩余字节与完成百分比（每 5 秒刷新）。','pair.recover.empty':'尚无互备文件夹——配对并在上方勾选目录后，这里显示恢复进度。','pair.recover.nopeer':'尚未配对——配对并开启互备后才有可恢复的文件夹。','pair.recover.stdown':'Syncthing 未运行或不可达（可在「总览 → 管家组件」中启动）','pair.recover.remaining':'剩余 {b}','pair.recover.state.syncing':'同步中','pair.recover.state.idle':'已同步','pair.recover.state.scanning':'扫描中','pair.recover.state.error':'错误','pair.recover.state.unknown':'未知','pair.stdown':'Syncthing 未运行——配对与目录下发需要它在线（可在「总览 → 管家组件」启动）','pair.ctlwarn':'控制面不可达——配对信令暂时不可用；本机数据不受影响，稍后自动重试',
 };
 I18N.en={
@@ -1265,7 +1271,7 @@ I18N.en={
   'fs.fs':'⛶ Fullscreen','fs.exit':'✕ Exit fullscreen','fs.open':'↗ Open in new tab','fs.start':'🚀 Start engine & open',
   'st.wait1':'Starting (first run ~10-30s)…','st.wait2':'Starting (cold start ~30-60s)…','st.wait':'Starting ({t})…','st.fail1':'Service not started — start it with one click (first run ~10-30s)','st.fail2':'Service not started — start it with one click (cold start ~30-60s)','st.failmsg':'Service not started — start it with one click ({t})','st.starting':'Starting, please wait…','st.enginefail':'Engine start failed','st.ctnfail':'Container start failed','st.bootfail':'Start failed: {m}','st.portfail':'Service is running but the port is unreachable (port-forwarding issue?)','st.timeout':'Start timed out (90s) — check the Containers page and retry',
   'tray.running':'running','tray.stopped':'stopped','tray.timer':'Sync timer','tray.timerOn':'enabled','tray.timerOff':'disabled','tray.lastRun':'last','tray.usb':'External disk','tray.usbOn':'online','tray.usbOff':'ejected','tray.err':'Status unavailable','tray.gotray':'Go to Managed services',
-  'sync2.st':'Sync status','sync2.timer':'Mirror timer','sync2.devices':'Device links','sync2.mirrorLast':'Last mirror','sync2.links':'Sync links','sync2.add':'➕ New sync','sync2.wiz':'New sync','sync2.wizSub':'pick folder → pick target → done','sync2.s1':'Pick folder','sync2.s2':'Pick target','sync2.s3':'Done','sync2.folderLab':'Local folder (absolute path)','sync2.folderPh':'e.g. D:\\Photos (example)','sync2.quick':'Common folders: ','sync2.tgMirror':'Local mirror','sync2.tgMirrorD':'Full copy on another disk of this machine, protects against disk failure','sync2.tgMirrorDst':'e.g. D:\\Mirror\\Photos (example)','sync2.tgDev':'Another device','sync2.tgDevD':'Two-way sync with a phone/PC via Syncthing, history versions kept automatically','sync2.tgDevSelf':'Register locally only (no paired devices yet)','sync2.tgManual':'Manual guide','sync2.tgManualD':'Configure it yourself following the guide; the panel only records the link','sync2.pick':'Select','sync2.picked':'Selected','sync2.prev':'← Back','sync2.next':'Next →','sync2.create':'Create sync','sync2.creating':'Creating…','sync2.done':'Sync created','sync2.engineNote':'The sync engine handles the how automatically: multi-directional sync, conflict handling and history versions — no manual setup needed.','sync2.again':'Create another','sync2.needFolder':'Enter the local folder as an absolute path (e.g. D:\\Photos, example)','sync2.needTarget':'Pick a sync target first','sync2.needDst':'Enter the mirror destination (e.g. D:\\Mirror\\Photos, example)','sync2.stdown':'Syncthing is not running — device sync cannot be created. Start it in Overview → Managed services, or pick Local mirror instead.','sync2.noDev':'No other devices paired yet; pair one on the Phone page, or register locally only for now.','sync2.empty':'No sync links yet. Click "New sync" and finish in three steps: pick a local folder → pick a target (local mirror / another device / manual guide) → done.','sync2.errfail':'Load failed: ','sync2.degraded':'Syncthing is not running — device sync and link status are unavailable (start it in Overview → Managed services); the mirror timer is unaffected.','sync2.on':'on','sync2.off':'off','sync2.lastRun':'last run','sync2.never':'never ran','sync2.logNone':'no mirror log yet','sync2.mirrorNA':'not configured','sync2.devN':'{a} online / {b} total','sync2.kindMirror':'Mirror','sync2.kindDev':'Device','sync2.kindManual':'Manual','sync2.resOk':'synced','sync2.resWarn':'syncing','sync2.resErr':'error','sync2.resNone':'registered','sync2.resOffline':'engine offline','sync2.resManual':'manual','sync2.resWaitMirror':'mirror pending','sync2.del':'Delete','sync2.delconfirm':'Delete sync link "{n}"?\nOnly the panel record is removed; a Syncthing folder is removed from the engine best-effort (no files are ever deleted).','sync2.selfMark':' (this device)','sync2.online':'online','sync2.offline':'offline','sync2.guideTitle':'Manual setup guide','sync2.g1':'1. Install Syncthing on the target device (Syncthing-Fork on phones, see the Phone page).','sync2.g2':'2. Add the device on both sides (this machine\'s device ID is on the Phone page QR).','sync2.g3':'3. Share the folder on both sides with type "Send & Receive"; versioning is recommended.','sync2.g4':'4. Come back here and check that the link turns green.',
+  'sync2.st':'Sync status','sync2.timer':'Mirror timer','sync2.devices':'Device links','sync2.mirrorLast':'Last mirror','sync2.links':'Sync links','sync2.add':'➕ New sync','sync2.wiz':'New sync','sync2.wizSub':'pick folder → pick target → done','sync2.s1':'Pick folder','sync2.s2':'Pick target','sync2.s3':'Done','sync2.folderLab':'Local folder (absolute path)','sync2.folderPh':'e.g. D:\\Photos (example)','sync2.quick':'Common folders: ','sync2.tgMirror':'Local mirror','sync2.tgMirrorD':'Full copy on another disk of this machine, protects against disk failure','sync2.tgMirrorDst':'e.g. D:\\Mirror\\Photos (example)','sync2.tgDev':'Another device','sync2.tgDevD':'Two-way sync with a phone/PC via Syncthing, history versions kept automatically','sync2.tgDevSelf':'Register locally only (no paired devices yet)','sync2.tgManual':'Manual guide','sync2.tgManualD':'Configure it yourself following the guide; the panel only records the link','sync2.pick':'Select','sync2.picked':'Selected','sync2.prev':'← Back','sync2.next':'Next →','sync2.create':'Create sync','sync2.creating':'Creating…','sync2.done':'Sync created','sync2.engineNote':'The sync engine handles the how automatically: multi-directional sync, conflict handling and history versions — no manual setup needed.','sync2.again':'Create another','sync2.needFolder':'Enter the local folder as an absolute path (e.g. D:\\Photos, example)','sync2.needTarget':'Pick a sync target first','sync2.needDst':'Enter the mirror destination (e.g. D:\\Mirror\\Photos, example)','sync2.stdown':'Syncthing is not running — device sync cannot be created. Start it in Overview → Managed services, or pick Local mirror instead.','sync2.noDev':'No other devices paired yet; pair one on the Phone page, or register locally only for now.','sync2.empty':'No sync links yet. Click "New sync" and finish in three steps: pick a local folder → pick a target (local mirror / another device / manual guide) → done.','sync2.errfail':'Load failed: ','sync2.degraded':'Syncthing is not running — device sync and link status are unavailable (start it in Overview → Managed services); the mirror timer is unaffected.','sync2.on':'on','sync2.off':'off','sync2.lastRun':'last run','sync2.never':'never ran','sync2.logNone':'no mirror log yet','sync2.mirrorNA':'not configured','sync2.devN':'{a} online / {b} total','sync2.kindMirror':'Mirror','sync2.kindDev':'Device','sync2.kindManual':'Manual','sync2.resOk':'synced','sync2.resWarn':'syncing','sync2.resErr':'error','sync2.resNone':'registered','sync2.resOffline':'engine offline','sync2.resManual':'manual','sync2.resWaitMirror':'mirror pending','sync2.del':'Delete','sync2.delconfirm':'Delete sync link "{n}"?\nOnly the panel record is removed; a Syncthing folder is removed from the engine best-effort (no files are ever deleted).','sync2.selfMark':' (this device)','sync2.online':'online','sync2.offline':'offline','sync2.guideTitle':'Manual setup guide','sync2.g1':'1. Install Syncthing on the target device (Syncthing-Fork on phones, see the Phone page).','sync2.g2':'2. Add the device on both sides (this machine\'s device ID is on the Phone page QR).','sync2.g3':'3. Share the folder on both sides with type "Send & Receive"; versioning is recommended.','sync2.g4':'4. Come back here and check that the link turns green.','sync2.pendT':'Pending phones','sync2.pendN':'{a} devices / {b} shares','sync2.pendNote':'After Syncthing-Fork on the phone scans the QR on the Phone page, the pairing request shows up here; accept the device and create a shared folder in one click.','sync2.pendAccept':'Accept','sync2.pendDismiss':'Dismiss','sync2.pendFrom':'from {d}...','sync2.dirSend':'PC → phone','sync2.dirRecv':'phone → PC','sync2.dirBoth':'Both ways','sync2.share':'Share with...','sync2.shareHint':'Pick devices and confirm; once both phones share the same folder and accept it in Syncthing-Fork, they sync with each other through this PC.','sync2.shareGo':'Confirm share','sync2.shareNone':'Pick at least one device',
   'edit.title':'Edit components','edit.sub':'Saved to data/components.json · applies immediately, survives restart','edit.close':'✕ Close','edit.save':'💾 Save to disk','edit.reset':'↺ Restore defaults','edit.cancel':'Cancel',
   'edit.sec.nav':'Navigation (label/icon/target/sort/hidden)','edit.sec.tiles':'Top-bar tiles (type=action/service-light)','edit.sec.cards':'Service cards (compose-derived + user overrides)','edit.sec.frames':'iframe pages (url supports ${FENG_IP})',
   'edit.f.label':'Label','edit.f.icon':'Icon','edit.f.target':'Target','edit.f.sort':'Sort','edit.f.hidden':'Hidden','edit.f.type':'Type','edit.f.action':'Action','edit.f.service':'Service key','edit.f.name':'Name','edit.f.desc':'Description','edit.f.url':'URL','edit.f.port':'Port','edit.f.title':'Title','edit.f.container':'Container key','edit.f.boot_hint':'Boot hint','edit.f.removed':'Delete',
@@ -1280,7 +1286,7 @@ I18N.en={
   'load.fail':'Load failed','load.unknown':'unknown reason','load.auto15':' (auto-retry in 15s)',
   'ast.nonestart':'No autostart items','ast.none':'None',
   'syncnet.offline':'Syncthing not running or unreachable (start it in Overview → Managed services)','syncnet.online':'Syncthing online · {d} devices · {f} folders','syncnet.devsub':'{a}/{b} online','syncnet.fldsub':'{f} folders · {r} device copies','syncnet.errfail':'Sync network load failed: ','syncnet.fail':'Load failed','syncnet.emptydev':'No devices','syncnet.emptyfld':'No folders','syncnet.synced':'synced','syncnet.syncing':'syncing','syncnet.onself':'this device','syncnet.replica':'{n} copies','syncnet.files':'{n} files / global {m}','syncnet.pending':'{n} pending','syncnet.unnamed':'unnamed','syncnet.na':'No data',
-  'p.control':'Control plane','ctl.onoff':'🚀 Control-plane reporting','ctl.enable':'Enable','ctl.disable':'Disable','ctl.enabled':'enabled','ctl.disabled':'disabled','ctl.url':'Control-plane URL','ctl.device':'Device name','ctl.state':'Subscription','ctl.st.un':'Not activated','ctl.st.trial':'Trial','ctl.st.active':'Active','ctl.st.expiring':'Expiring soon','ctl.st.expired':'Expired','ctl.st.cancelled':'Cancelled','ctl.expires':'Expires','ctl.never':'—','ctl.hb':'last heartbeat','ctl.hbnever':'no heartbeat yet','ctl.unreach':'Control plane unreachable','ctl.retrynow':'↻ Retry now','ctl.retrying':'Retrying…','ctl.retry.ok':'Heartbeat ok','ctl.retry.off':'Control-plane reporting is off - enable it to retry','ctl.failcnt':'{n} failed heartbeat(s)','ctl.nextretry':'next retry in {s}s','ctl.up.title':'Recent uploads','ctl.up.empty':'No uploads yet','ctl.up.repeated':'deduped retry','ctl.register':'📋 Register device','ctl.activate':'✅ Activate','ctl.copy':'📋 Copy code','ctl.copied':'✔ Copied','ctl.nocode':'No activation code yet','ctl.registered':'Registered, code: ','ctl.activated':'Activated: ','ctl.saved':'✔ Saved (applies to next heartbeat)','ctl.fail':'Failed: ','ctl.err':'Control-plane status unavailable','ctl.hw':'Hardware ID',
+  'p.control':'Control plane','ctl.onoff':'🚀 Control-plane reporting','ctl.enable':'Enable','ctl.disable':'Disable','ctl.enabled':'enabled','ctl.disabled':'disabled','ctl.url':'Control-plane URL','ctl.device':'Device name','ctl.state':'Subscription','ctl.st.un':'Not activated','ctl.st.trial':'Trial','ctl.st.active':'Active','ctl.st.expiring':'Expiring soon','ctl.st.expired':'Expired','ctl.st.cancelled':'Cancelled','ctl.expires':'Expires','ctl.never':'—','ctl.hb':'last heartbeat','ctl.hbnever':'no heartbeat yet','ctl.hb.ok':'OK','ctl.hb.fail':'FAILED','ago.now':'just now','ago.min':'{n} min ago','ago.hour':'{n} h ago','ago.day':'{n} d ago','ctl.unreach':'Control plane unreachable','ctl.retrynow':'↻ Retry now','ctl.retrying':'Retrying…','ctl.retry.ok':'Heartbeat ok','ctl.retry.off':'Control-plane reporting is off - enable it to retry','ctl.failcnt':'{n} failed heartbeat(s)','ctl.nextretry':'next retry in {s}s','ctl.up.title':'Recent uploads','ctl.up.empty':'No uploads yet','ctl.up.repeated':'deduped retry','ctl.register':'📋 Register device','ctl.activate':'✅ Activate','ctl.copy':'📋 Copy code','ctl.copied':'✔ Copied','ctl.nocode':'No activation code yet','ctl.registered':'Registered, code: ','ctl.activated':'Activated: ','ctl.saved':'✔ Saved (applies to next heartbeat)','ctl.fail':'Failed: ','ctl.err':'Control-plane status unavailable','ctl.codeph':'Enter an activation code first (8 chars, e.g. ABCD-2345)','ctl.badfmt':'Invalid activation code format: 8 chars expected (no 0/O/1/I), dashes/spaces allowed','ctl.hw':'Hardware ID',
   'nav.pair':'Mutual backup','p.pair':'Mutual backup','pair.invite':'Start pairing','pair.invite.hint':'Generate a 6-digit code on this node and enter it on the peer node\'s Mutual backup page (both nodes must be activated).','pair.code':'Invite code (valid 10 minutes)','pair.copycode':'📋 Copy code','pair.copied':'✔ Copied','pair.create':'🤝 Generate code','pair.join':'Join pairing','pair.join.hint':'Enter the peer\'s invite code here; both sides add each other in Syncthing automatically.','pair.join.ph':'123456','pair.join.btn':'✅ Join','pair.ttl':'{m} min {s} s left','pair.expired':'Code expired - generate a new one','pair.created':'Code generated. Once the peer enters it, this page flips to paired (~5s).','pair.joining':'Verifying code and adding devices…','pair.joined':'Paired: Syncthing devices added on both sides.','pair.peer':'Peer node','pair.peer.online':'online','pair.peer.offline':'offline','pair.peer.lastseen':'last active {s}s ago','pair.peer.neverseen':'never connected','pair.peer.errors':'{n} consecutive probe failures','pair.peer.healtherr':'health unavailable','pair.unpaired':'Not paired - pick a card to start (generate a code / enter the peer\'s code)','pair.pairedsub':'paired','pair.dirs':'Backup folders','pair.dirs.sub':'pick the folders to back up','pair.dirs.empty':'No local sync folders yet - create them in Syncthing first, then refresh here.','pair.enable':'🔁 Enable mutual backup','pair.enable.hint':'Selected folders sync send-receive with FORCED staggered versioning: deleted/overwritten files keep 7 days of versions (maxAge=604800s, 7-day cleanup cadence) and can be restored from the peer\'s .stversions within 7 days. Deletions propagate to the peer - the peer keeps the same 7-day version window as a safety net.','pair.enable.doing':'Provisioning folders…','pair.enable.none':'Check at least one folder first','pair.enable.done':'Mutual backup enabled: {n} folder(s)','pair.enable.partial':'Partially done: {ok} / {n} folders','pair.enable.fail':'All failed: ','pair.recover':'Recovery progress','pair.recover.hint':'After a node swap/reinstall: activate and re-check the original folders; Syncthing pulls the data back from the peer. This panel shows remaining bytes and percent per folder (refreshes every 5s).','pair.recover.empty':'No backup folders yet - pair and check folders above, then recovery progress appears here.','pair.recover.nopeer':'Not paired yet - nothing to recover until pairing and mutual backup are enabled.','pair.recover.stdown':'Syncthing not running or unreachable (start it in Overview → Managed services)','pair.recover.remaining':'{b} left','pair.recover.state.syncing':'syncing','pair.recover.state.idle':'synced','pair.recover.state.scanning':'scanning','pair.recover.state.error':'error','pair.recover.state.unknown':'unknown','pair.stdown':'Syncthing not running - pairing and provisioning need it online (start it in Overview → Managed services)','pair.ctlwarn':'Control plane unreachable - pairing signaling temporarily unavailable; local data is unaffected and retries happen automatically',
 };
 function t(k){const d=I18N[CUR_LANG]||I18N.zh;return d&&d[k]?d[k]:''}
@@ -2385,6 +2391,87 @@ async function loadSyncPage(){
     if(errEl){errEl.hidden=false;errEl.innerHTML=loadError(e,loadSyncPage);bindLoadRetry(errEl,loadSyncPage)}
   }
   await loadSyncLinks();
+  loadSyncPending();
+}
+// ②b 待配对手机：轮询 /api/sync/pending，一键接受（可顺带建共享文件夹）/忽略
+let SYNC2_PENDING={devices:[],folders:[]};
+async function loadSyncPending(){
+  const card=document.getElementById('sync2-pending-card');
+  try{
+    const d=await j('/api/sync/pending');
+    SYNC2_PENDING=d&&d.ok!==false?d:{devices:[],folders:[]};
+  }catch(e){SYNC2_PENDING={devices:[],folders:[]}}
+  renderSyncPending();
+}
+function renderSyncPending(){
+  const card=document.getElementById('sync2-pending-card');
+  const list=document.getElementById('sync2-pending-list');
+  const sub=document.getElementById('sync2-pending-sub');
+  if(!card||!list)return;
+  const devs=SYNC2_PENDING.devices||[],folds=SYNC2_PENDING.folders||[];
+  if(!devs.length&&!folds.length){card.hidden=true;list.innerHTML='';return}
+  card.hidden=false;
+  if(sub)sub.textContent=t('sync2.pendN').replace('{a}',devs.length).replace('{b}',folds.length);
+  let h='';
+  devs.forEach(function(dv){
+    const row='pend-'+esc(dv.id);
+    h+='<div class="sw" style="align-items:center;flex-wrap:wrap;gap:.45rem">'
+      +'<div class="sn">'+esc(dv.name)+' <span class="dim" style="font-size:.62rem">'+esc(dv.short_id)+'…</span></div>'
+      +'<input id="'+row+'-path" class="tinput" placeholder="D:\\Photos（可选，建立共享文件夹）" style="max-width:230px;flex:1;min-width:150px">'
+      +'<select id="'+row+'-dir" class="tinput" style="max-width:110px;padding:.2rem .35rem">'
+      +'<option value="sendonly">'+t('sync2.dirSend')+'</option>'
+      +'<option value="receiveonly">'+t('sync2.dirRecv')+'</option>'
+      +'<option value="sendreceive">'+t('sync2.dirBoth')+'</option></select>'
+      +'<button class="btn on" data-pacc-dev="'+esc(dv.id)+'">'+t('sync2.pendAccept')+'</button>'
+      +'<button class="btn off" data-pdis-dev="'+esc(dv.id)+'">'+t('sync2.pendDismiss')+'</button></div>';
+  });
+  folds.forEach(function(f){
+    const dev=(f.offered_by&&f.offered_by[0]&&f.offered_by[0].device)||'';
+    h+='<div class="sw" style="align-items:center;flex-wrap:wrap;gap:.45rem">'
+      +'<div class="sn">'+esc(f.label)+' <span class="dim" style="font-size:.62rem">'+esc(f.id)+'</span></div>'
+      +'<div class="stt dim">'+(dev?t('sync2.pendFrom').replace('{d}',esc(shortDev(dev))):'')+'</div>'
+      +'<button class="btn on" data-pacc-fold="'+esc(f.id)+'" data-pdev="'+esc(dev)+'">'+t('sync2.pendAccept')+'</button>'
+      +'<button class="btn off" data-pdis-fold="'+esc(f.id)+'" data-pdev="'+esc(dev)+'">'+t('sync2.pendDismiss')+'</button></div>';
+  });
+  list.innerHTML=h;
+}
+function shortDev(id){return String(id||'').slice(0,7)}
+async function pendingAct(fn){
+  try{const r=await fn();if(r&&r.ok===false)alert(r.error||r.message||'')}
+  catch(e){alert((e&&e.message)||e)}
+  loadSyncPending();
+}
+function bindSyncPending(){
+  const refresh=document.getElementById('sync2-pending-refresh');
+  if(refresh)refresh.onclick=()=>loadSyncPending();
+  const list=document.getElementById('sync2-pending-list');
+  if(!list)return;
+  list.onclick=async function(ev){
+    const b=ev.target.closest('button');if(!b)return;
+    const devAcc=b.dataset.paccDev,devDis=b.dataset.pdisDev;
+    const foldAcc=b.dataset.paccFold,foldDis=b.dataset.pdisFold;
+    if(devAcc){
+      const dir=document.getElementById('pend-'+devAcc+'-dir');
+      const ftype=dir?dir.value:'sendonly';
+      const pin=document.getElementById('pend-'+devAcc+'-path');
+      const fp=pin?pin.value.trim():'';
+      if(fp){
+        await pendingAct(()=>j('/api/sync/link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder_path:fp,target_kind:'syncthing',pending_device_id:devAcc,folder_type:ftype})}));
+        loadSyncLinks();
+      }else{
+        await pendingAct(()=>j('/api/sync/pending/devices/'+encodeURIComponent(devAcc)+'/accept',{method:'POST'}));
+      }
+    }else if(devDis){
+      await pendingAct(()=>j('/api/sync/pending/devices/'+encodeURIComponent(devDis)+'/dismiss',{method:'DELETE'}));
+    }else if(foldAcc){
+      const dev=b.dataset.pdev||'';
+      await pendingAct(()=>j('/api/sync/pending/folders/'+encodeURIComponent(foldAcc)+'/'+encodeURIComponent(dev)+'/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}));
+      loadSyncLinks();
+    }else if(foldDis){
+      const dev=b.dataset.pdev||'';
+      await pendingAct(()=>j('/api/sync/pending/folders/'+encodeURIComponent(foldDis)+'/'+encodeURIComponent(dev)+'/dismiss',{method:'DELETE'}));
+    }
+  };
 }
 // ① 状态卡：镜像定时器（可开关，走托管通道）/ Syncthing（可启停）/ 设备连接 / 最近镜像
 function renderSync2Status(d){
@@ -2446,12 +2533,41 @@ function syncLinkResult(l){
 }
 function syncLinkRow(l){
   const dotCls=syncLinkResult(l)[0],resKey=syncLinkResult(l)[1];
+  // D6 手机↔手机中转：syncthing 链路可把该文件夹追加共享给其他已配对设备
+  const shareBtn=(l.kind==='syncthing'&&l.st_folder_id)
+    ?'<button class="btn off" data-sshare="'+esc(l.id)+'" data-fid="'+esc(l.st_folder_id)+'">'+t('sync2.share')+'</button>'
+    :'';
   return '<div class="row">'+
     '<span class="lk-badge">'+t(SYNC2_KIND[l.kind]||'sync2.kindManual')+'</span>'+
     '<span class="lk-path" title="'+esc(l.folder_path)+'">'+esc(l.folder_path)+' → '+esc(syncLinkTarget(l))+'</span>'+
     '<span class="lk-res"><i class="ldot '+dotCls+'"></i>'+esc(t(resKey))+'</span>'+
+    shareBtn+
     '<button class="btn danger" data-sdel="'+esc(l.id)+'" data-name="'+esc(l.folder_label||l.folder_path)+'">'+t('sync2.del')+'</button>'+
-  '</div>';
+  '</div>'+
+  (shareBtn?'<div id="sbox-'+esc(l.id)+'" hidden style="padding:.35rem .6rem"></div>':'');
+}
+// 共享面板：勾选设备 → 确认 → POST /api/sync/folders/:id/share；两台手机都共享同一文件夹即可经电脑互相同步
+function syncShareToggle(linkId,fid){
+  const box=document.getElementById('sbox-'+linkId);
+  if(!box)return;
+  if(!box.hidden){box.hidden=true;return}
+  const devs=((SYNC2&&SYNC2.syncthing&&SYNC2.syncthing.devices)||[]).filter(d=>!d.self);
+  box.innerHTML='<div class="dim" style="font-size:.68rem;margin-bottom:.35rem">'+t('sync2.shareHint')+'</div>'
+    +(devs.length
+      ?devs.map(d=>'<label style="margin-right:.9rem;font-size:.72rem"><input type="checkbox" class="sdev" value="'+esc(d.id)+'"> '+esc(d.name)+'</label>').join('')
+        +'<button class="btn on" data-sshare-go="'+esc(linkId)+'" data-fid="'+esc(fid)+'">'+t('sync2.shareGo')+'</button>'
+      :'<span class="dim" style="font-size:.72rem">'+t('sync2.noDev')+'</span>');
+  box.hidden=false;
+}
+async function syncShareGo(linkId,fid){
+  const box=document.getElementById('sbox-'+linkId);if(!box)return;
+  const ids=Array.prototype.slice.call(box.querySelectorAll('input.sdev:checked')).map(x=>x.value);
+  if(!ids.length){alert(t('sync2.shareNone'));return}
+  try{
+    const r=await j('/api/sync/folders/'+encodeURIComponent(fid)+'/share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_ids:ids})});
+    alert((r&&r.ok===false)?(r.error||r.message||''):(r.message||''));
+    if(r&&r.ok!==false)box.hidden=true;
+  }catch(e){alert((e&&e.message)||e)}
 }
 async function loadSyncLinks(){
   const sub=document.getElementById('sync2-links-sub');
@@ -2628,6 +2744,10 @@ document.addEventListener('click',e=>{
   if(rt){loadSyncPage();return}
   const ag=e.target.closest('#sync2-wiz-again');
   if(ag){syncWizReset();return}
+  const sg=e.target.closest('button[data-sshare-go]');
+  if(sg){syncShareGo(sg.dataset.sshareGo,sg.dataset.fid);return}
+  const sb=e.target.closest('button[data-sshare]');
+  if(sb){syncShareToggle(sb.dataset.sshare,sb.dataset.fid);return}
   const del=e.target.closest('button[data-sdel]');
   if(del)syncDelLink(del.dataset.sdel,del.dataset.name);
 });
@@ -3097,6 +3217,8 @@ async function loadPairRecover(){
 let CTL=null;
 function ctlStateText(st){const m={'unactivated':'ctl.st.un','trial':'ctl.st.trial','active':'ctl.st.active','expiring':'ctl.st.expiring','expired':'ctl.st.expired','cancelled':'ctl.st.cancelled'};return t(m[st]||'ctl.st.un')}
 function fmtDate(ts){if(!ts)return t('ctl.never');const d=new Date(ts*1000);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+// Relative "x minutes ago" for the last-heartbeat line (ts in epoch seconds).
+function fmtAgo(ts){const s=Math.max(0,Math.floor(Date.now()/1000-ts));const f=(k,n)=>t(k).replace('{n}',n);if(s<60)return f('ago.now');if(s<3600)return f('ago.min',Math.floor(s/60));if(s<86400)return f('ago.hour',Math.floor(s/3600));return f('ago.day',Math.floor(s/86400))}
 function ctlErrText(r){if(!r)return t('ctl.fail');if(r.message)return t('ctl.fail')+esc(r.message);if(r.errors)return t('ctl.fail')+esc(r.errors.map(e=>e.message||e.field).join('; '));return t('ctl.fail')+esc(JSON.stringify(r).slice(0,120))}
 async function loadControlStatus(){
   const sub=document.getElementById('ctl-sub'),stEl=document.getElementById('ctl-state'),tg=document.getElementById('ctl-toggle');
@@ -3106,7 +3228,7 @@ async function loadControlStatus(){
     if(!r||!r.ok){if(sub)sub.textContent=t('ctl.err');return}
     if(sub){
       const on=r.enabled?'<span class="ok">'+t('ctl.enabled')+'</span>':'<span class="err">'+t('ctl.disabled')+'</span>';
-      const hb=r.last_heartbeat_at?(t('ctl.hb')+' '+fmtDate(r.last_heartbeat_at)):t('ctl.hbnever');
+      const hb=r.last_heartbeat_at?(t('ctl.hb')+' '+fmtAgo(r.last_heartbeat_at)+(r.last_heartbeat_ok===false?' <span class="err">'+t('ctl.hb.fail')+'</span>':(r.last_heartbeat_ok===true?' <span class="ok">'+t('ctl.hb.ok')+'</span>':''))):t('ctl.hbnever');
       const un=r.plane_unreachable===true?' <span class="err">'+t('ctl.unreach')+'</span>':'';
       sub.innerHTML=on+' · '+hb+un;
     }
@@ -3182,8 +3304,11 @@ async function ctlRegister(btn){
 async function ctlActivate(){
   const msg=document.getElementById('ctl-msg');
   const btn=document.getElementById('ctl-activate');
-  const code=(document.getElementById('ctl-code').value||'').trim().toUpperCase();
+  const code=(document.getElementById('ctl-code').value||'').trim().toUpperCase().replace(/[-\s]/g,'');
   if(!code){if(msg)msg.textContent=t('ctl.codeph');return}
+  // Local format pre-check mirrors the server (8 chars, alphabet w/o 0/O/1/I):
+  // bad input never costs a network round trip.
+  if(!/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/.test(code)){if(msg)msg.innerHTML='<span class="err">'+t('ctl.badfmt')+'</span>';return}
   const old=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span>'+t('ctl.retrying')+'</span>';
   try{
     const r=await j('/api/control/activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
@@ -3534,6 +3659,7 @@ function bindControls(){
   document.getElementById('ast-refresh').onclick=()=>loadAutostart();
   document.getElementById('syncnet-refresh').onclick=()=>loadSyncNet();
   document.getElementById('sync2-refresh').onclick=()=>loadSyncPage();
+  bindSyncPending();
   document.getElementById('sync2-add').onclick=()=>syncWizOpen();
   document.getElementById('sync2-wiz-close').onclick=()=>syncWizClose();
   document.getElementById('sync2-prev').onclick=()=>{if(SWIZ.step>1){SWIZ.step--;syncWizRender()}};

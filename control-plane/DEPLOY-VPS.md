@@ -23,7 +23,7 @@ cargo build --release
 # 产物：target/release/flygo-control-plane.exe
 ```
 
-- 依赖走国内镜像（`C:/FengNAS/cargo/config.toml` 的 rsproxy 配置）。
+- 依赖走国内镜像（`C:/FlyGoLegacy/cargo/config.toml` 的 rsproxy 配置）。
 - 产物是单文件、strip 过（`[profile.release]` 已开 `opt-level=z / lto / strip`），约几 MB。
 - 把 `flygo-control-plane.exe` 拷到 VPS 后改名 `flygo-control-plane`（Linux 无后缀）。
 

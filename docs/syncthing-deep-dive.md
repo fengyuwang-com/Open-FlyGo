@@ -1,7 +1,7 @@
 # Syncthing 深入研究（T-07）
 
 > 2026-09-06 · 结论先行：引擎本身无需任何改造；T-09 只做三件事——必装（manifest pin v2.1.3）+ 按需托管（daemon）+ 复用现有编排（M06/M07 不动）。
-> 证据等级：A=本机实测（C:/FengNAS/syncthing，v2.1.3 Hafnium Hornet）· B=官方文档（docs.syncthing.net，2026-09-06 实读）· C=仓内代码（panel 调用点）。
+> 证据等级：A=本机实测（C:/FlyGoLegacy/syncthing，v2.1.3 Hafnium Hornet）· B=官方文档（docs.syncthing.net，2026-09-06 实读）· C=仓内代码（panel 调用点）。
 
 ---
 
@@ -21,7 +21,7 @@
 
 ## 三、`-home` 归属决策（A，本节是 T-09 的直接输入）
 
-- 现状： canonical home = `C:/FengNAS/syncthing/config`（6 配对 + vfengvault + staggered 参数全在里面）；`config.rs` 的 root-relative 默认是 `external/syncthing/config`（空，不存在）。
+- 现状： canonical home = `C:/FlyGoLegacy/syncthing/config`（6 配对 + vfengvault + staggered 参数全在里面）；`config.rs` 的 root-relative 默认是 `external/syncthing/config`（空，不存在）。
 - 决策：daemon 的 `-home` 解析顺序 = `FENGPAGE_SYNCTHING_HOME` env > **legacy 现存目录**（保留配对）> root-relative 新目录（新用户）。
 - 禁止：安装器/组件更新**永远不删 `-home`**（只换 exe）；卸载保留数据（只停不删，与容器卸载语义一致）。
 

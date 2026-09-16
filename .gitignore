@@ -1,5 +1,5 @@
 # FlyGo .gitignore
-# Keep this file pure ASCII (GBK/encoding-safe; see FengNAS repo warning).
+# Keep this file pure ASCII (GBK/encoding-safe; see FlyGoLegacy repo warning).
 # Principle: no secrets, no binaries, no runtime artifacts in git.
 
 # ---------- build artifacts ----------

@@ -226,8 +226,8 @@ impl Item for NavItem {
         if u.label.is_some() { self.label = u.label.clone(); }
         if u.icon.is_some() { self.icon = u.icon.clone(); }
         if u.target.is_some() { self.target = u.target.clone(); }
-        if u.sort.is_some() { self.sort = u.sort.clone(); }
-        if u.hidden.is_some() { self.hidden = u.hidden.clone(); }
+        if u.sort.is_some() { self.sort = u.sort; }
+        if u.hidden.is_some() { self.hidden = u.hidden; }
     }
 }
 
@@ -240,7 +240,7 @@ impl Item for TileItem {
         if u.icon.is_some() { self.icon = u.icon.clone(); }
         if u.action.is_some() { self.action = u.action.clone(); }
         if u.service.is_some() { self.service = u.service.clone(); }
-        if u.hidden.is_some() { self.hidden = u.hidden.clone(); }
+        if u.hidden.is_some() { self.hidden = u.hidden; }
     }
 }
 
@@ -252,11 +252,11 @@ impl Item for CardItem {
         if u.icon.is_some() { self.icon = u.icon.clone(); }
         if u.desc.is_some() { self.desc = u.desc.clone(); }
         if u.url.is_some() { self.url = u.url.clone(); }
-        if u.port.is_some() { self.port = u.port.clone(); }
+        if u.port.is_some() { self.port = u.port; }
         if u.ctn.is_some() { self.ctn = u.ctn.clone(); }
         if u.group.is_some() { self.group = u.group.clone(); }
-        if u.sort.is_some() { self.sort = u.sort.clone(); }
-        if u.hidden.is_some() { self.hidden = u.hidden.clone(); }
+        if u.sort.is_some() { self.sort = u.sort; }
+        if u.hidden.is_some() { self.hidden = u.hidden; }
     }
 }
 
@@ -268,8 +268,8 @@ impl Item for FrameItem {
         if u.url.is_some() { self.url = u.url.clone(); }
         if u.container.is_some() { self.container = u.container.clone(); }
         if u.boot_hint.is_some() { self.boot_hint = u.boot_hint.clone(); }
-        if u.fullscreen.is_some() { self.fullscreen = u.fullscreen.clone(); }
-        if u.hidden.is_some() { self.hidden = u.hidden.clone(); }
+        if u.fullscreen.is_some() { self.fullscreen = u.fullscreen; }
+        if u.hidden.is_some() { self.hidden = u.hidden; }
     }
 }
 
@@ -335,7 +335,7 @@ pub fn user_service_lights() -> Option<Vec<(String, String)>> {
                     .filter_map(|t| {
                         t.service
                             .clone()
-                            .map(|k| (k.clone(), t.label.clone().unwrap_or_else(|| k)))
+                            .map(|k| (k.clone(), t.label.clone().unwrap_or(k)))
                     })
                     .collect(),
             )
@@ -742,7 +742,7 @@ mod tests {
         .await;
         assert_eq!(r["ok"], true);
         assert!(comp.exists(), "components.json must be written");
-        assert!(comp.with_extension("json.tmp").exists() == false, "tmp must be renamed away");
+        assert!(!comp.with_extension("json.tmp").exists(), "tmp must be renamed away");
 
         let j2 = get_config().await.unwrap_or_else(|e| panic!("get failed: {}", e.0)).0;
         assert_eq!(j2["merged"], true);

@@ -11,7 +11,7 @@
 1. **netsh portproxy**（`100.x:P -> 127.0.0.1:P`）：对 DERP 中继包无效。
    同 WiFi 直连时包走真实网卡，portproxy 能拦截；手机走移动数据时包经
    tailscaled 用户态/Wintun 到达，portproxy 的钩子看不到，直接丢包。
-   实测：serve 摘掉后 `curl http://100.123.90.16:5244/` → 000。
+   实测：serve 摘掉后 `curl http://100.101.102.103:5244/` → 000。
 2. **tailscale serve**：官方设计只认 `.ts.net` 域名不认 IP（上游 issue
    #11301 原话 "we currently only support content served over `.ts.net`
    domains"）。经 IP 访问必 404；且 serve 与 portproxy 抢同一批端口，
@@ -55,7 +55,7 @@
 
 | 路径 | 100.x | 局域网 IP | 域名 |
 |---|---|---|---|
-| 容器（5244/8096/2283…）经 tcpfwd | `http://100.x:P/` 200 | `http://192.168.1.151:P/` 200 | 不需要 |
+| 容器（5244/8096/2283…）经 tcpfwd | `http://100.x:P/` 200 | `http://192.168.1.50:P/` 200 | 不需要 |
 | 面板 | :8388 直连 | :8388 直连 | `https://<node>.ts.net/`（serve 443） |
 | 控制面 | — | — | `https://<node>.ts.net/ctrl`（serve 443） |
 

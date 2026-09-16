@@ -1,8 +1,8 @@
 # FlyGo 面板 UI 现状审计报告
 
-> 审计对象：`C:\FengProj\FlyGo\panel\static\index.html`（单文件前端，1399 行）
+> 审计对象：`C:\FlyGoLegacy\panel\static\index.html`（单文件前端，1399 行）
 > **审计基准 = 读时工作树**（2026-08-16 读取时状态；并行 Agent 的"组件可编辑系统一期"可能正在改动本文件，行号以读取版本为准）。
-> 审计依据：`docs/ui-design-guide.md`（FlyGo UI 宪法，灵魂来自 `C:\FengProj\fengyuwang_com\DESIGN.md`）。
+> 审计依据：`docs/ui-design-guide.md`（FlyGo UI 宪法，灵魂来自 `~/fengyuwang_com/DESIGN.md`）。
 > 方法：只读，未修改任何代码。行号 = 读取版本的行号。
 
 ---

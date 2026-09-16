@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # backup-portainer.sh - FlyGo portainer.db scheduled backup.
 #
-# Copies C:\FengNAS\portainer\portainer.db (bbolt DB) out to a
-# non-FengNAS backup root with a timestamp, keeps the newest N copies,
+# Copies C:\FlyGoLegacy\portainer\portainer.db (bbolt DB) out to a
+# non-FlyGoLegacy backup root with a timestamp, keeps the newest N copies,
 # verifies sha256(src) == sha256(copy), and reports the portainer
 # container running state. Pure bash, runs in git-bash (Windows) and
 # Linux CI.
 #
-# HARD RED LINE (AGENTS.md rule #1): C:\FengNAS is READ-ONLY. We only
-# READ the source portainer.db and write the backup OUTSIDE FengNAS
+# HARD RED LINE (AGENTS.md rule #1): C:\FlyGoLegacy is READ-ONLY. We only
+# READ the source portainer.db and write the backup OUTSIDE FlyGoLegacy
 # (default: repo root .wt-backups/portainer/, which is git-ignored via
-# the .wt-*/ rule). Never create the backup tree under C:\FengNAS.
+# the .wt-*/ rule). Never create the backup tree under C:\FlyGoLegacy.
 #
 # Usage:
 #   scripts/backup-portainer.sh                     # run with defaults
@@ -19,7 +19,7 @@
 #   scripts/backup-portainer.sh --out /d/backups    # custom backup root
 #
 # Env overrides:
-#   PORTAINER_DB    source db path (default from --src or /c/FengNAS/...)
+#   PORTAINER_DB    source db path (default from --src or /c/FlyGoLegacy/...)
 #   BACKUP_ROOT     backup root dir (default repo root .wt-backups/portainer)
 #   KEEP            number of copies to keep (default 5)
 #
@@ -49,7 +49,7 @@ KEEP="$DEFAULT_KEEP"
 
 usage() {
     cat <<'EOF'
-backup-portainer.sh - backup portainer.db out of FengNAS (read-only source).
+backup-portainer.sh - backup portainer.db out of FlyGoLegacy (read-only source).
 
 Usage:
   backup-portainer.sh [--help] [--src PATH] [--out PATH] [--keep N]
@@ -148,8 +148,8 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# make backup root (OUT is guaranteed outside FengNAS by caller; we only
-# create it under whatever the user supplied, never under /c/FengNAS)
+# make backup root (OUT is guaranteed outside FlyGoLegacy by caller; we only
+# create it under whatever the user supplied, never under /c/FlyGoLegacy)
 # ---------------------------------------------------------------------------
 mkdir -p "$OUT" || { echo "error: cannot create backup root: $OUT" >&2; exit 1; }
 
@@ -157,7 +157,7 @@ TS="$(date +%Y%m%d-%H%M%S)"
 DEST="$OUT/portainer-$TS.db"
 
 # ---------------------------------------------------------------------------
-# copy + verify (cp from FengNAS read-only source; read only)
+# copy + verify (cp from FlyGoLegacy read-only source; read only)
 # ---------------------------------------------------------------------------
 cp "$SRC" "$DEST"
 if [ $? -ne 0 ]; then

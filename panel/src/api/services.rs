@@ -76,7 +76,7 @@ pub async fn services() -> ApiResult<Json<Services>> {
         let mut pids: Vec<u32> = Vec::new();
         for (pid, pname, pexe) in &procs {
             // 进程名或可执行路径包含关键词即命中（忽略大小写）
-            if pname.contains(&needle_l) || pexe.as_deref().map_or(false, |e| e.contains(&needle_l)) {
+            if pname.contains(&needle_l) || pexe.as_deref().is_some_and(|e| e.contains(&needle_l)) {
                 pids.push(pid.as_u32());
             }
         }

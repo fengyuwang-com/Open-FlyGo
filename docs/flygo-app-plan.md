@@ -1,7 +1,7 @@
 # FlyGo 手机客户端（APK）产品规划
 
 > 状态：v1.0 规划稿 · 2026-08-16 · 性质：权威规划，指导后续所有版本开发；与本文档冲突的既有约定以本文档为准（冲突先更新本文档再动手）。
-> 依据：`docs/产品哲学与工程原则.md`、`docs/plainapp-report.md`、`docs/plainapp-integration.md`、`docs/android-env-and-plainapp-fork-report.md`、`docs/ui-design-guide.md`、`C:\FengNAS\control-plane\README.md`、panel 现状（源码核对）。
+> 依据：`docs/产品哲学与工程原则.md`、`docs/plainapp-report.md`、`docs/plainapp-integration.md`、`docs/android-env-and-plainapp-fork-report.md`、`docs/ui-design-guide.md`、`C:\FlyGoLegacy\control-plane\README.md`、panel 现状（源码核对）。
 > 范围：只定义"做什么、什么时候做、怎么验收"；实现细节见各调研报告。拿不准处标【待确认】。
 
 ## 0. 规划结论（TL;DR）
@@ -187,7 +187,7 @@ PWA 仍作兜底（产品哲学 §7：iOS 用户浏览器访问面板，不阻�
 |---|---|---|
 | 控制面本机部署（9001） | ✅ 运行中，API 闭环验证 | 入口 `https://<panel-node>.ts.net/ctrl`（Tailscale Serve） |
 | 面板接入控制面（W2） | ✅ 已合 main（63eeaaa 控制面接入 + aa872e5 M15 加固） | api/control.rs、api/upload.rs、tests/control_api.rs + 心跳/上传/幂等/不可达降级 |
-| fork 控制面客户端（shared） | ✅ 已提交 5e5b043 | C:\FengProj\PlainApp |
+| fork 控制面客户端（shared） | ✅ 已提交 5e5b043 | ~/PlainApp |
 | fork app 模块（HTTP 客户端模式+SEND 转发+设置卡） | ✅ M01 已提交 392c560（16 文件：3 个缺失 i18n import 修复、默认 URL 置空） | compileGithubDebugKotlin 绿；1.0 APK 已构建（M02） |
 | vdisp 遥控/固定分辨率 | ✅ M08 已实施 10bb603（模式 API + 60s 守护 + 卡片控制） | docs/vdisp-pinning-design.md；按设计文档方案落地，实机识别 ParsecVDA ✅ |
 | 上游 PlainApp bug | ✅ issue #341 已报（OPEN） | plainhub/plain-app |

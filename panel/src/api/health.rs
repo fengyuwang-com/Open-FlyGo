@@ -10,7 +10,7 @@ use tokio::net::TcpStream;
 
 /// CREATE_NO_WINDOW: powershell.exe is a console app; spawned from a GUI
 /// parent it flashes a black window unless this flag is set.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::winproc::CREATE_NO_WINDOW;
 
 // ---- /api/health/services ----
 // Service card wall: TCP connectivity probe per service port, all probed

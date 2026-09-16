@@ -52,6 +52,21 @@ CONTENT_RE='(TOKEN|SECRET|PASSWORD|PASSWD|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]
 # PEM private-key blocks are definitive anywhere, even inside code files.
 PEM_RE='-----BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----'
 
+# High-entropy fallback for source files: a quoted token of >= 32 chars from
+# the base64/hex alphabet that mixes upper case, lower case and digits is a
+# likely embedded secret (API keys, JWT-ish blobs). Only DOUBLE and SINGLE
+# quoted tokens are scanned - unquoted code identifiers never match. Benign
+# well-known constants (encoding alphabets) are allowlisted exactly below.
+HIGHENT_DOUBLE_RE='"[A-Za-z0-9+/=_-]{32,}"'
+HIGHENT_SINGLE_RE="'[A-Za-z0-9+/=_-]{32,}'"
+# RFC 4648 base64 alphabets (standard + URL-safe + Crockford-ish variant):
+# the only known benign 32+ mixed-case+digit literals in this repo.
+HIGHENT_ALLOW=(
+    '"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"'
+    '"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"'
+    '"ABCDEFGHJKLMNPQRSTUVWXYZ23456789"'
+)
+
 # Config-like files get the KEY=value content scan; Rust/JS source is only
 # scanned for PEM blocks, so ordinary code is never false-flagged on
 # variable names.
@@ -62,11 +77,52 @@ content_scan_file() {
         *.env|*.env.*|*.toml|*.yaml|*.yml|*.json|*.ini|*.conf|*.cfg|*.properties|*.txt|*.bat|*.cmd|*.ps1|*.sh)
             return 0 ;;
     esac
+    case "$base" in
+        # Source code: keep PEM scan (separate rule, runs on every file)
+        # but never KEY=value scan - source identifiers paired with
+        # function calls are not secrets (e.g. panel/src/api/auth.rs).
+        # The high-entropy fallback (source_scan_file) still applies.
+        *.rs|*.js|*.ts|*.jsx|*.tsx|*.py|*.go|*.java|*.kt|*.c|*.cpp|*.h)
+            return 1 ;;
+    esac
     case "$f" in
         *config*|*secret*|*credential*|*cred*|*auth*|*token*|*passwd*|*password*)
             return 0 ;;
     esac
     return 1
+}
+
+# Source-code extensions get the PEM scan (above) plus the high-entropy
+# fallback (quoted 32+ char mixed-case+digit tokens).
+source_scan_file() {
+    local base
+    base="$(basename -- "$1")"
+    case "$base" in
+        *.rs|*.js|*.ts|*.jsx|*.tsx|*.py|*.go|*.java|*.kt|*.c|*.cpp|*.h)
+            return 0 ;;
+    esac
+    return 1
+}
+
+check_high_entropy() { # file content
+    local f="$1" tok rest allow skip
+    while IFS= read -r tok; do
+        [ -n "$tok" ] || continue
+        skip=0
+        for allow in "${HIGHENT_ALLOW[@]}"; do
+            if [ "$tok" = "$allow" ]; then skip=1; break; fi
+        done
+        [ "$skip" = 1 ] && continue
+        # Strip the surrounding quote and require upper + lower + digit.
+        rest="${tok:1:${#tok}-2}"
+        if printf '%s' "$rest" | grep -q '[A-Z]' \
+            && printf '%s' "$rest" | grep -q '[a-z]' \
+            && printf '%s' "$rest" | grep -q '[0-9]'; then
+            report "$f" "content: high-entropy literal" "quoted 32+ char token with upper+lower+digit"
+            return 1
+        fi
+    done < <(printf '%s' "$2" | grep -oE -- "$HIGHENT_DOUBLE_RE"; printf '%s' "$2" | grep -oE -- "$HIGHENT_SINGLE_RE")
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -103,6 +159,9 @@ check_content() { # file content (already read; files with NUL skipped)
             report "$f" "content: secret assignment" "KEY=VALUE with a non-empty value"
             return 1
         fi
+    elif source_scan_file "$f"; then
+        check_high_entropy "$f" "$input" && return 0
+        return 1
     fi
     return 0
 }
@@ -158,6 +217,12 @@ self_test() {
     printf '%s: %s\n' "$k" "$v" > "$tmp/s3.yml"
     pk="PRIVATE"
     printf '%s\n' "-----BEGIN $pk KEY-----" > "$tmp/pk.txt"
+    # High-entropy fallback: source file with a 32+ char mixed-case+digit
+    # quoted literal is flagged (value pieced together so this script does
+    # not flag itself); the base64 alphabet constant is allowlisted.
+    h="A1b2C3d4""E5f6G7h8I9j0K1l2M3n4O5p6"
+    printf 'const %s = "%s"\n' "key" "$h" > "$tmp/s4.js"
+    printf 'const ALPHA = "%s"\n' "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" > "$tmp/ok3.rs"
     # Allowed files: code with a "token" variable, boolean values, docs
     printf 'let %s = "%s"\n' "tok""en" "resolve" > "$tmp/ok.rs"
     printf 'enabled = true\n' > "$tmp/ok.toml"
@@ -167,10 +232,10 @@ self_test() {
         MODE=all check_blob "$f"
     done
     rc=0
-    [ "$OFFENDERS" -eq 10 ] || { printf 'SELF-TEST FAIL: expected 10 offenders, got %s\n' "$OFFENDERS"; rc=1; }
+    [ "$OFFENDERS" -eq 11 ] || { printf 'SELF-TEST FAIL: expected 11 offenders, got %s\n' "$OFFENDERS"; rc=1; }
     rm -rf "$tmp"
     if [ "$rc" -eq 0 ]; then
-        printf 'SELF-TEST OK (10 offenders detected, 3 allowed files passed)\n'
+        printf 'SELF-TEST OK (11 offenders detected, 4 allowed files passed)\n'
     fi
     exit "$rc"
 }

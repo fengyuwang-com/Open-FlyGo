@@ -29,7 +29,7 @@ use std::time::{Duration, Instant};
 /// CREATE_NO_WINDOW: cmd.exe / tasklist.exe / taskkill.exe are console apps;
 /// spawned from a GUI parent they flash a black window unless this flag is set.
 /// docker-ctl.cmd's wsl.exe children inherit this hidden console.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::winproc::CREATE_NO_WINDOW;
 
 /// 开关动作的串行锁：避免多个按钮同时点导致 wsl 命令并发打架。
 pub static LOCK: Mutex<()> = Mutex::new(());
@@ -138,10 +138,10 @@ pub(crate) fn run_ctl_capture_to(args: &[&str], timeout_secs: u64) -> String {
 // `up -d --no-recreate` 兼顾"从未创建"与"已存在仅启动"两种情况。
 
 /// 把宿主机路径（docker-compose.yml 或其目录）映射为 WSL 里的目录：
-/// `C:/FengNAS`            -> `/mnt/c/FengNAS`
-/// `C:\FengNAS\compose.yml`-> `/mnt/c/FengNAS`（带点 basename 视为文件，取其父目录）
-/// `/mnt/c/FengNAS`        -> 原样返回
-/// 纯字符串逻辑，可单测；映射不了返回 None（上层回退默认 /mnt/c/FengNAS）。
+/// `C:/FlyGoLegacy`            -> `/mnt/c/FlyGoLegacy`
+/// `C:\FlyGoLegacy\compose.yml`-> `/mnt/c/FlyGoLegacy`（带点 basename 视为文件，取其父目录）
+/// `/mnt/c/FlyGoLegacy`        -> 原样返回
+/// 纯字符串逻辑，可单测；映射不了返回 None（上层回退默认 /mnt/c/FlyGoLegacy）。
 fn wsl_dir_of(host: &Path) -> Option<String> {
     let raw = host.to_string_lossy().replace('\\', "/");
     let mut p = raw.trim_end_matches('/').to_string();
@@ -444,12 +444,12 @@ mod tests {
     #[test]
     fn wsl_dir_mapping() {
         let cases: Vec<(&str, &str)> = vec![
-            (r"C:\FengNAS", "/mnt/c/FengNAS"),
-            (r"C:\FengNAS\docker-compose.yml", "/mnt/c/FengNAS"),
-            ("C:/FengNAS/docker-compose.yml", "/mnt/c/FengNAS"),
+            (r"C:\FlyGoLegacy", "/mnt/c/FlyGoLegacy"),
+            (r"C:\FlyGoLegacy\docker-compose.yml", "/mnt/c/FlyGoLegacy"),
+            ("C:/FlyGoLegacy/docker-compose.yml", "/mnt/c/FlyGoLegacy"),
             (r"D:\data", "/mnt/d/data"),
             (r"E:\", "/mnt/e"),
-            ("/mnt/c/FengNAS", "/mnt/c/FengNAS"),
+            ("/mnt/c/FlyGoLegacy", "/mnt/c/FlyGoLegacy"),
             ("/mnt/d/data/compose.yaml", "/mnt/d/data"),
         ];
         for (input, want) in cases {
@@ -469,8 +469,8 @@ mod tests {
     /// the exit code for reliable success detection.
     #[test]
     fn compose_inner_builds_quoted_command() {
-        let inner = build_compose_inner("/mnt/c/FengNAS", &["up", "-d", "--no-recreate", "alist"]);
-        assert!(inner.starts_with("cd '/mnt/c/FengNAS' && docker compose "), "{inner}");
+        let inner = build_compose_inner("/mnt/c/FlyGoLegacy", &["up", "-d", "--no-recreate", "alist"]);
+        assert!(inner.starts_with("cd '/mnt/c/FlyGoLegacy' && docker compose "), "{inner}");
         assert!(inner.contains("'--no-recreate'"), "{inner}");
         assert!(inner.contains("2>&1; echo [[exit=$?]]"), "{inner}");
         // 服务名里的单引号必须被转义，避免注入

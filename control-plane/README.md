@@ -37,7 +37,7 @@
 | POST | `/api/admin/codes/revoke` | 管理 JWT 或原始管理 token | `{code}` | 作废未使用的码（已用码 409 / 未知码 404） |
 | GET | `/` | 无 | — | 内嵌管理页（登录 → 设备表 → 激活码管理） |
 
-错误格式统一：`{"ok": false, "message": "..."}`（与 FengNAS 面板一致）。
+错误格式统一：`{"ok": false, "message": "..."}`（与 FlyGoLegacy 面板一致）。
 
 ## 环境变量
 

@@ -33,7 +33,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::os::windows::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -46,7 +46,7 @@ static HEARTBEAT_LOCK: LazyLock<tokio::sync::Mutex<()>> =
     LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 /// CREATE_NO_WINDOW: spawned console helpers (reg.exe) must not flash.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::winproc::CREATE_NO_WINDOW;
 /// REST timeout for control-plane calls (register/activate can be slow).
 const PLANE_TIMEOUT_SECS: u64 = 8;
 
@@ -107,30 +107,45 @@ fn state_path() -> PathBuf {
     crate::config::get().control_state.clone()
 }
 
-fn load_state() -> ControlState {
-    let path = state_path();
-    match std::fs::read_to_string(&path) {
+fn load_state_from(path: &Path) -> ControlState {
+    match std::fs::read_to_string(path) {
         Ok(text) => serde_json::from_str(&text).unwrap_or_default(),
         Err(_) => ControlState::default(),
     }
 }
 
-/// Atomic write: tmp file + rename (mirrors api/components.rs). Corrupt or
-/// missing state simply falls back to defaults on the next read.
-fn save_state(st: &ControlState) -> Result<(), String> {
-    let path = state_path();
-    let _guard = STATE_WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+/// Atomic write with a one-generation .bak backup (mirrors
+/// api/native.rs save_store): the previous file is copied to
+/// <name>.json.bak before the new content replaces it via tmp + rename.
+/// Corrupt or missing state simply falls back to defaults on the next read.
+fn save_state_at(path: &Path, st: &ControlState) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create {} failed: {e}", parent.display()))?;
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("create {} failed: {e}", parent.display()))?;
+        }
     }
     let text = serde_json::to_string_pretty(st)
         .map_err(|e| format!("serialize control state failed: {e}"))?;
+    if path.exists() {
+        let _ = std::fs::copy(path, path.with_extension("json.bak"));
+    }
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, text)
         .map_err(|e| format!("write {} failed: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, &path)
-        .map_err(|e| { let _ = std::fs::remove_file(&tmp); format!("replace {} failed: {e}", path.display()) })
+    std::fs::rename(&tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("replace {} failed: {e}", path.display())
+    })
+}
+
+fn load_state() -> ControlState {
+    load_state_from(&state_path())
+}
+
+fn save_state(st: &ControlState) -> Result<(), String> {
+    let _guard = STATE_WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    save_state_at(&state_path(), st)
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +177,47 @@ pub fn next_retry_in_secs(
     let iv = heartbeat_backoff(fail_count, base_secs) as i64;
     let since = last_attempt_at.map(|t| now_secs.saturating_sub(t)).unwrap_or(0);
     Some(iv.saturating_sub(since).max(0))
+}
+
+// ---------------------------------------------------------------------------
+// activation code local validation (pure, mirrors the control-plane alphabet)
+// ---------------------------------------------------------------------------
+
+/// Activation code alphabet per the control-plane contract
+/// (control-plane/src/db.rs CODE_ALPHABET): 8 chars, no 0/O/1/I.
+pub const CODE_ALPHABET: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/// Normalize raw user input into the 8-char form the plane expects:
+/// trim, uppercase, drop separators ('-' / spaces). None when anything
+/// else remains (wrong length or characters outside the alphabet).
+pub fn normalize_code(input: &str) -> Option<String> {
+    let cleaned: String = input
+        .trim()
+        .chars()
+        .filter(|c| !matches!(c, '-' | ' '))
+        .map(|c| c.to_ascii_uppercase())
+        .collect();
+    validate_code_format(&cleaned).ok().map(|_| cleaned)
+}
+
+/// Local format check (pure): exactly 8 chars, every char in CODE_ALPHABET.
+/// Mirrors the server-side check so bad input never costs a network round
+/// trip; the plane stays the authority (it also checks usage / revocation).
+pub fn validate_code_format(code: &str) -> Result<(), String> {
+    if code.len() != 8 {
+        return Err(format!(
+            "invalid activation code format: expected 8 chars from the set {} (got {} chars)",
+            CODE_ALPHABET,
+            code.chars().count()
+        ));
+    }
+    if code.chars().any(|c| !CODE_ALPHABET.contains(c)) {
+        return Err(format!(
+            "invalid activation code format: characters must come from {} (no 0/O/1/I)",
+            CODE_ALPHABET
+        ));
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -330,7 +386,13 @@ pub async fn register() -> Json<Value> {
 }
 
 fn register_blocking(base_url: &str, device_name: &str) -> Value {
-    let mut st = load_state();
+    register_blocking_at(&state_path(), base_url, device_name)
+}
+
+/// Core register flow against an explicit state file path (testable: the
+/// mock-plane tests pass a temp path instead of the real install root).
+fn register_blocking_at(state_path: &Path, base_url: &str, device_name: &str) -> Value {
+    let mut st = load_state_from(state_path);
     if let Some(code) = &st.activation_code {
         if !code.trim().is_empty() {
             return json!({
@@ -368,7 +430,7 @@ fn register_blocking(base_url: &str, device_name: &str) -> Value {
             st.activation_code = Some(code.clone());
             st.registered_at = Some(now());
             st.last_error = None;
-            if let Err(e) = save_state(&st) {
+            if let Err(e) = save_state_at(state_path, &st) {
                 return json!({"ok": false, "message": e});
             }
             json!({
@@ -399,11 +461,11 @@ pub async fn activate(body: String) -> Json<Value> {
     let code = serde_json::from_str::<Value>(&body)
         .ok()
         .and_then(|v| v.get("code").and_then(|c| c.as_str()).map(str::to_string))
-        .map(|c| c.trim().to_uppercase())
-        .unwrap_or_default();
-    if code.is_empty() {
-        return Json(json!({"ok": false, "message": "activation code is required (8 chars, e.g. ABCD-EFGH)"}));
-    }
+        .and_then(|c| normalize_code(&c));
+    let Some(code) = code else {
+        // Rejected locally: never costs a network round trip.
+        return Json(json!({"ok": false, "message": format!("invalid activation code format (8 chars from {}, dashes/spaces allowed)", CODE_ALPHABET)}));
+    };
     let s = crate::settings::Settings::load();
     let base = s.control_base_url();
     let r = tokio::task::spawn_blocking(move || activate_blocking(&base, &code))
@@ -413,7 +475,17 @@ pub async fn activate(body: String) -> Json<Value> {
 }
 
 fn activate_blocking(base_url: &str, code: &str) -> Value {
-    let mut st = load_state();
+    activate_blocking_at(&state_path(), base_url, code)
+}
+
+/// Core activate flow against an explicit state file path (testable: the
+/// mock-plane tests pass a temp path instead of the real install root).
+/// Double-checks the code format before any plane call (defense in depth).
+fn activate_blocking_at(state_path: &Path, base_url: &str, code: &str) -> Value {
+    if let Err(e) = validate_code_format(code) {
+        return json!({"ok": false, "message": e});
+    }
+    let mut st = load_state_from(state_path);
     // Idempotent activation: this exact code already bound this node. Serve
     // the cached identity without a second plane call - repeated clicks (or a
     // retried request) must never double-bind, and the cache works offline.
@@ -446,7 +518,7 @@ fn activate_blocking(base_url: &str, code: &str) -> Value {
             st.subscription = Some(sub.clone());
             st.activated_at = Some(now());
             st.last_error = None;
-            if let Err(e) = save_state(&st) {
+            if let Err(e) = save_state_at(state_path, &st) {
                 return json!({"ok": false, "message": e});
             }
             json!({"ok": true, "token": token, "subscription": sub, "hardware_id": hw})
@@ -691,10 +763,18 @@ fn toml_escape(s: &str) -> String {
 
 /// Background heartbeat loop. Interval is re-read from [control] each cycle
 /// so config edits apply without a restart; skipped entirely while disabled
-/// or not activated. Failures are logged and retried on the next tick
-/// (no penalty, per the control-plane contract).
+/// or not activated. Failures are logged and retried with exponential
+/// backoff (no penalty, per the control-plane contract).
+///
+/// Shutdown discipline (P1-4): the task is tracked in main.rs bg_tasks (the
+/// tail aborts it) AND polls the SHUTTING_DOWN stop bit so it never starts
+/// a new plane call once a graceful shutdown was requested.
 pub async fn heartbeat_task() {
     loop {
+        // Stop bit: stand down immediately during graceful shutdown.
+        if crate::shutdown_requested() {
+            break;
+        }
         let s = crate::settings::Settings::load();
         let base_secs = s.control_heartbeat_secs()
             .clamp(10, crate::settings::CONTROL_OFFLINE_WINDOW_SECS - 1);
@@ -703,6 +783,9 @@ pub async fn heartbeat_task() {
         let fail_count = load_state().heartbeat_fail_count;
         let secs = heartbeat_backoff(fail_count, base_secs);
         tokio::time::sleep(Duration::from_secs(secs)).await;
+        if crate::shutdown_requested() {
+            break;
+        }
         if !s.control_enabled() {
             continue;
         }
@@ -710,9 +793,16 @@ pub async fn heartbeat_task() {
         // Serialized against the manual "retry now" endpoint: at most one
         // in-flight heartbeat, so the retry state stays truthful.
         let _guard = HEARTBEAT_LOCK.lock().await;
+        if crate::shutdown_requested() {
+            break;
+        }
         match heartbeat_once(&base).await {
-            Ok(()) => eprintln!("[control] heartbeat ok"),
-            Err(e) => eprintln!("[control] heartbeat failed: {e} (no penalty; backoff next tick)"),
+            Ok(()) => crate::log::log("INFO", "control.heartbeat", "heartbeat ok"),
+            Err(e) => crate::log::log(
+                "WARN",
+                "control.heartbeat",
+                &format!("heartbeat failed: {e} (no penalty; backoff next tick)"),
+            ),
         }
     }
 }
@@ -720,27 +810,36 @@ pub async fn heartbeat_task() {
 /// One heartbeat: POST /api/heartbeat with disk free / online / version,
 /// then refresh the local subscription cache from the response.
 pub async fn heartbeat_once(base_url: &str) -> Result<(), String> {
-    let st = load_state();
+    let path = state_path();
+    let base = base_url.to_string();
+    let version = read_version();
+    tokio::task::spawn_blocking(move || heartbeat_once_blocking(&path, &base, &version))
+        .await
+        .unwrap_or_else(|_| Err("heartbeat task panicked".into()))
+}
+
+/// Core heartbeat flow against an explicit state file path and version
+/// (testable: mock-plane tests pass temp paths and a fixed version, so they
+/// never touch the process-global config). Blocking (ureq + sysinfo) - call
+/// inside spawn_blocking.
+pub(crate) fn heartbeat_once_blocking(
+    state_path: &Path,
+    base_url: &str,
+    version: &str,
+) -> Result<(), String> {
+    let st = load_state_from(state_path);
     let Some(token) = st.token.clone() else {
         return Err("not activated yet (no token)".into());
     };
-    let disk = tokio::task::spawn_blocking(disk_free_bytes)
-        .await
-        .unwrap_or(0);
-    let version = read_version();
+    let disk = disk_free_bytes();
     let body = json!({
         "disk_free_bytes": disk,
         "online": true,
         "version": version,
     });
-    let base = base_url.to_string();
-    let r = tokio::task::spawn_blocking(move || {
-        call_plane(&base, "POST", "/api/heartbeat", Some(&body), Some(&token))
-    })
-    .await
-    .unwrap_or_else(|_| Err("heartbeat task panicked".into()));
+    let r = call_plane(base_url, "POST", "/api/heartbeat", Some(&body), Some(&token));
 
-    let mut st2 = load_state();
+    let mut st2 = load_state_from(state_path);
     match r {
         Ok(v) => {
             let (server_state, expires_at) = sub_from_value(&v);
@@ -753,7 +852,7 @@ pub async fn heartbeat_once(base_url: &str) -> Result<(), String> {
             st2.last_error = None;
             // Persist every cycle: the heartbeat timestamps must survive even
             // when the subscription itself is unchanged.
-            let _ = save_state(&st2);
+            let _ = save_state_at(state_path, &st2);
             crate::api::stats::record_control(true);
             Ok(())
         }
@@ -762,7 +861,7 @@ pub async fn heartbeat_once(base_url: &str) -> Result<(), String> {
             st2.last_heartbeat_ok = Some(false);
             st2.heartbeat_fail_count = st2.heartbeat_fail_count.saturating_add(1);
             st2.last_error = Some(e.clone());
-            let _ = save_state(&st2);
+            let _ = save_state_at(state_path, &st2);
             crate::api::stats::record_control(false);
             Err(e)
         }
@@ -888,8 +987,7 @@ mod tests {
     #[test]
     fn upsert_control_replaces_existing_section() {
         let text = "[control]\nenabled = true\nbase_url = \"http://old:1\"\nheartbeat_secs = 60\nupload_max_mb = 100\ndevice_name = \"x\"\n[server]\naddr = \"0.0.0.0:8388\"\n";
-        let mut c = crate::settings::ControlCfg::default();
-        c.enabled = true;
+        let c = crate::settings::ControlCfg { enabled: true, ..Default::default() };
         let out = upsert_control_section(text, &c);
         assert_eq!(out.matches("[control]").count(), 1);
         assert!(out.contains("base_url = \"http://127.0.0.1:9001\""));
@@ -947,5 +1045,280 @@ mod tests {
         )
         .unwrap();
         assert_eq!(st2.heartbeat_fail_count, 3);
+    }
+
+    #[test]
+    fn validate_code_format_mirrors_the_plane_alphabet() {
+        // Valid 8-char codes from the alphabet pass.
+        assert!(validate_code_format("ABCD2345").is_ok());
+        assert!(validate_code_format("ZZZZ9999").is_ok());
+        // Wrong length rejected.
+        assert!(validate_code_format("ABCD234").is_err());
+        assert!(validate_code_format("ABCD23456").is_err());
+        // Ambiguous / out-of-alphabet characters rejected (no 0/O/1/I).
+        assert!(validate_code_format("ABCD2305").is_err()); // 0
+        assert!(validate_code_format("ABCO2345").is_err()); // O
+        assert!(validate_code_format("ABC12345").is_err()); // 1
+        assert!(validate_code_format("ABCI2345").is_err()); // I
+        // Separators must be stripped by normalize_code first.
+        assert!(validate_code_format("ABCD-2345").is_err());
+    }
+
+    #[test]
+    fn normalize_code_strips_separators_and_uppercases() {
+        assert_eq!(normalize_code("abcd-2345"), Some("ABCD2345".into()));
+        assert_eq!(normalize_code(" ABCD 2345 "), Some("ABCD2345".into()));
+        assert_eq!(normalize_code("ABCD2345"), Some("ABCD2345".into()));
+        // Invalid shapes normalize to None (never sent to the plane).
+        assert_eq!(normalize_code(""), None);
+        assert_eq!(normalize_code("ABCD234"), None);
+        assert_eq!(normalize_code("ABCD-2305"), None); // 0 not in alphabet
+        assert_eq!(normalize_code("hello!!!"), None);
+        // Lowercase without separators still uppercases.
+        assert_eq!(normalize_code("abcd2345"), Some("ABCD2345".into()));
+        // Separators-only input cleans to the empty string -> None.
+        assert_eq!(normalize_code("- - "), None);
+        // Too long, even with separators, never reaches the plane.
+        assert_eq!(normalize_code("ABCD-2345-67"), None);
+        // Non-ASCII input is out of the alphabet -> None.
+        assert_eq!(normalize_code("ABCD234\u{4e2d}"), None);
+    }
+
+    #[test]
+    fn save_state_writes_a_generation_bak_backup() {
+        let dir = std::env::temp_dir().join(format!("flygo-ctl-bak-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("control-state.json");
+        let mut st = ControlState {
+            hardware_id: "PANEL-first".into(),
+            device_name: "flygo-panel".into(),
+            ..Default::default()
+        };
+        save_state_at(&path, &st).unwrap();
+        assert!(path.exists());
+        // First write: no .bak yet (nothing to back up).
+        assert!(!path.with_extension("json.bak").exists());
+        // Second write: the first generation moves to .bak.
+        st.hardware_id = "PANEL-second".into();
+        save_state_at(&path, &st).unwrap();
+        let bak = path.with_extension("json.bak");
+        assert!(bak.exists(), ".bak must hold the previous generation");
+        let bak_text = std::fs::read_to_string(&bak).unwrap();
+        assert!(bak_text.contains("PANEL-first"));
+        assert!(!bak_text.contains("PANEL-second"));
+        assert!(std::fs::read_to_string(&path).unwrap().contains("PANEL-second"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // -----------------------------------------------------------------------
+    // mock control-plane integration tests (local axum server, no real VPS)
+    // -----------------------------------------------------------------------
+
+    use axum::routing::{get, post};
+
+    /// Starts a tiny in-process control-plane mock on an ephemeral port and
+    /// returns its base URL. Behavior is driven by the shared flags so each
+    /// test script can flip responses without a second server.
+    struct MockPlane {
+        base: String,
+        expired: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    fn spawn_mock_plane() -> MockPlane {
+        use std::sync::atomic::AtomicBool;
+        let expired = std::sync::Arc::new(AtomicBool::new(false));
+        let expired_clone = expired.clone();
+        let app = axum::Router::new()
+            .route(
+                "/api/register",
+                post(|| async {
+                    axum::Json(json!({
+                        "ok": true,
+                        "device": {
+                            "hardware_id": "PANEL-TEST",
+                            "activation_code": "ABCD2345",
+                            "subscription_state": "pending",
+                        }
+                    }))
+                }),
+            )
+            .route(
+                "/api/activate",
+                post(move || {
+                    let expired = expired_clone.clone();
+                    async move {
+                        if expired.load(std::sync::atomic::Ordering::Relaxed) {
+                            // Subscription already past its expiry: the plane
+                            // still issues a token, state says expired.
+                            axum::Json(json!({
+                                "ok": true,
+                                "token": "mock-jwt-expired",
+                                "subscription_state": "expired",
+                                "expires_at": 1,
+                            }))
+                        } else {
+                            axum::Json(json!({
+                                "ok": true,
+                                "token": "mock-jwt-ok",
+                                "subscription_state": "active",
+                                "expires_at": 4_000_000_000i64,
+                            }))
+                        }
+                    }
+                }),
+            )
+            .route(
+                "/api/heartbeat",
+                post(|| async {
+                    axum::Json(json!({
+                        "ok": true,
+                        "server_time": 1_700_000_000i64,
+                        "subscription_state": "active",
+                        "expires_at": 4_000_000_000i64,
+                    }))
+                }),
+            )
+            .route(
+                "/api/status",
+                get(|| async {
+                    axum::Json(json!({
+                        "ok": true,
+                        "server_time": 1_700_000_000i64,
+                        "device": {"subscription_state": "active"},
+                    }))
+                }),
+            );
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        MockPlane { base: format!("http://{addr}"), expired }
+    }
+
+    fn temp_state_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("flygo-ctl-mock-{}-{}", tag, std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn preseed_state(path: &Path) {
+        let st = ControlState {
+            hardware_id: "PANEL-TEST-1234".into(),
+            device_name: "flygo-panel".into(),
+            ..Default::default()
+        };
+        save_state_at(path, &st).unwrap();
+    }
+
+    /// Full happy path: register -> activate -> heartbeat against the mock
+    /// plane. State file must end up activated with a fresh heartbeat.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn mock_plane_success_flow() {
+        let plane = spawn_mock_plane();
+        let dir = temp_state_dir("ok");
+        let path = dir.join("control-state.json");
+        preseed_state(&path);
+
+        let reg = register_blocking_at(&path, &plane.base, "flygo-panel");
+        assert_eq!(reg["ok"], json!(true));
+        assert_eq!(reg["activation_code"], json!("ABCD2345"));
+
+        let act = activate_blocking_at(&path, &plane.base, "ABCD2345");
+        assert_eq!(act["ok"], json!(true), "activate: {act}");
+        assert_eq!(act["token"], json!("mock-jwt-ok"));
+        assert_eq!(act["subscription"]["state"], json!("active"));
+
+        let st = load_state_from(&path);
+        assert_eq!(st.token.as_deref(), Some("mock-jwt-ok"));
+        assert!(st.activated_at.is_some());
+
+        heartbeat_once_blocking(&path, &plane.base, "test-1.2.3").expect("heartbeat ok");
+        let st2 = load_state_from(&path);
+        assert_eq!(st2.last_heartbeat_ok, Some(true));
+        assert_eq!(st2.heartbeat_fail_count, 0);
+        assert_eq!(st2.subscription.as_ref().unwrap().state, "active");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Expired subscription: activation still succeeds (the plane issues a
+    /// token) and the local state records "expired". Per the project iron
+    /// rule, expired ONLY stops paid services - the panel keeps working
+    /// (there is no local lock: the token and state are stored, local
+    /// features never consult them).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn mock_plane_expired_still_activates_without_local_lock() {
+        let plane = spawn_mock_plane();
+        plane.expired.store(true, std::sync::atomic::Ordering::Relaxed);
+        let dir = temp_state_dir("expired");
+        let path = dir.join("control-state.json");
+        preseed_state(&path);
+
+        // Dashed input goes through normalize_code first (as the handler does).
+        let code = normalize_code("ABCD-2345").expect("dashed code normalizes");
+        let act = activate_blocking_at(&path, &plane.base, &code);
+        assert_eq!(act["ok"], json!(true), "activate: {act}");
+        assert_eq!(act["subscription"]["state"], json!("expired"));
+
+        let st = load_state_from(&path);
+        // No local lock: the token is kept and nothing marks the panel as
+        // disabled - only the subscription state reads "expired".
+        assert_eq!(st.token.as_deref(), Some("mock-jwt-expired"));
+        assert_eq!(st.subscription.as_ref().unwrap().state, "expired");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Network failure: the plane is unreachable -> ok:false with an
+    /// "unreachable" message, and the local state file stays untouched
+    /// (no token written, no corruption).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn mock_plane_network_failure_leaves_state_intact() {
+        // Bind + drop a listener to get a guaranteed-closed port.
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = l.local_addr().unwrap();
+        drop(l);
+        let dir = temp_state_dir("netfail");
+        let path = dir.join("control-state.json");
+        preseed_state(&path);
+
+        let act = activate_blocking_at(&path, &format!("http://{addr}"), "ABCD2345");
+        assert_eq!(act["ok"], json!(false));
+        let msg = act["message"].as_str().unwrap_or_default();
+        assert!(msg.contains("unreachable"), "message: {msg}");
+
+        // The state file must be byte-identical to the preseeded one.
+        let st = load_state_from(&path);
+        assert_eq!(st.hardware_id, "PANEL-TEST-1234");
+        assert!(st.token.is_none());
+        assert!(st.subscription.is_none());
+        // Heartbeat against a dead plane: error, fail count bumps. Preseed a
+        // token first (a heartbeat without one fails before any network I/O).
+        let mut sth = load_state_from(&path);
+        sth.token = Some("mock-jwt-netfail".into());
+        save_state_at(&path, &sth).unwrap();
+        let hb = heartbeat_once_blocking(&path, &format!("http://{addr}"), "test-1.2.3");
+        assert!(hb.is_err());
+        let st2 = load_state_from(&path);
+        assert_eq!(st2.last_heartbeat_ok, Some(false));
+        assert_eq!(st2.heartbeat_fail_count, 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Invalid codes are rejected locally without any network round trip.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn invalid_code_rejected_without_network() {
+        let dir = temp_state_dir("badfmt");
+        let path = dir.join("control-state.json");
+        preseed_state(&path);
+        let act = activate_blocking_at(&path, "http://127.0.0.1:1", "12");
+        assert_eq!(act["ok"], json!(false));
+        assert!(act["message"].as_str().unwrap().contains("invalid activation code format"));
+        let st = load_state_from(&path);
+        assert!(st.token.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

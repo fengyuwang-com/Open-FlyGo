@@ -10,7 +10,7 @@ Defender 隔离了 `bin/flygo.exe` + 自启计划任务 `FlyGo`。恢复流程�
 
 ```powershell
 # 1. 加白（目录+进程，二选一即可，建议都要）
-Add-MpPreference -ExclusionPath "C:\FengProj\FlyGo"
+Add-MpPreference -ExclusionPath "C:\FlyGoLegacy"
 Add-MpPreference -ExclusionProcess "flygo.exe"
 # 2. 从隔离区全恢复
 & "$env:ProgramFiles\Windows Defender\MpCmdRun.exe" -Restore -All

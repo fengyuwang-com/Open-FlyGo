@@ -67,11 +67,11 @@ panel/
 | Syncthing | panel daemon 子进程（winget 安装） | 8384（仅 127.0.0.1） | panel 管家组件页 |
 | webcli | panel daemon 子进程 | 8788 | panel（默认自启） |
 | Homepage | panel daemon 子进程 | 本地 | panel（默认不启） |
-| Docker 容器 | WSL2 后端（FengNAS 引用只读） | 各自映射 | 容器页按需（portainer/alist/immich…） |
+| Docker 容器 | WSL2 后端（FlyGoLegacy 引用只读） | 各自映射 | 容器页按需（portainer/alist/immich…） |
 | 控制面 | `control-plane/` 单二进制（本机 9001，待 VPS） | 9001 | 手动/systemd（VPS） |
 | Tailscale Serve | 系统服务 | 8443→webcli 等 | `scripts/tailscale-serve.sh` |
 
-数据只落两处：`config/flygo.toml`（人写配置）与 `data/`（运行时状态，不入库敏感项）。**FengNAS（C:\FengNAS）只读**。
+数据只落两处：`config/flygo.toml`（人写配置）与 `data/`（运行时状态，不入库敏感项）。**FlyGoLegacy（C:\FlyGoLegacy）只读**。
 
 ## 4. 文档去哪写（写作路由）
 

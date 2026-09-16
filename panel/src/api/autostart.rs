@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 /// CREATE_NO_WINDOW: powershell.exe / reg.exe are console apps; spawned from
 /// a GUI parent they flash a black window unless this flag is set.
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+use crate::winproc::CREATE_NO_WINDOW;
 
 // ---------- 常量 ----------
 /// "废弃候选"名单——命中即在前端打 ⚠️ 标记，方便用户识别该不该开。

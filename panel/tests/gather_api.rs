@@ -10,10 +10,25 @@
 //
 // All code comments are pure ASCII.
 
+// Hidden-spawn helper shared with the panel crate (winproc) so the
+// included handler modules can resolve crate::winproc.
+#[allow(dead_code)]
+#[path = "../src/winproc.rs"]
+mod winproc;
+
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/settings.rs"]
 mod settings;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/config.rs"]
 mod config;
+// Shared source module: items flagged here may be used only by the main
+// binary, not by this test harness.
+#[allow(dead_code)]
 #[path = "../src/api/gather.rs"]
 mod gather;
 

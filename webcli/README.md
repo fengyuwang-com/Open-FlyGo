@@ -85,7 +85,7 @@ WEBHOST=127.0.0.1 ./target/release/..\bin\flygo-webcli.exe
 # 自定义端口 + 令牌
 WEBHOST=127.0.0.1 WEBPORT=9000 WEBTOKEN=<随机长串> ./target/release/..\bin\flygo-webcli.exe
 # 生产：绑定 Tailscale 私网 IP（见部署章节）
-WEBHOST=100.123.90.16 ./target/release/..\bin\flygo-webcli.exe
+WEBHOST=100.101.102.103 ./target/release/..\bin\flygo-webcli.exe
 ```
 
 ## 使用说明
